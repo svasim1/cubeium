@@ -1,0 +1,41 @@
+{
+	"schemaVersion": 1,
+	"id": "cubeium",
+	"version": "1.0.0",
+	"name": "Cubeium",
+	"description": "A seed map for Minecraft",
+	"authors": [
+		"Svasim"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/cubeium/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"cubeium.cubeium.Cubeium"
+		],
+		"client": [
+			"cubeium.cubeium.CubeiumClient"
+		]
+	},
+	"mixins": [
+		"cubeium.mixins.json",
+		{
+			"config": "cubeium.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.16.10",
+		"minecraft": "~1.21.4",
+		"java": ">=21",
+		"fabric-api": "*"
+	},
+	"suggests": {
+		"another-mod": "*"
+	}
+}
