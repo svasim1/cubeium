@@ -1,2 +1,2 @@
 # cubeium
-A seed map for Minecraft using Quilt
+A seed map for Minecraft using Fabric
