@@ -10,6 +10,13 @@ public class BiomeNoise {
     private static final int NP_WEIRDNESS = 4;
     private static final int NP_DEPTH = 5;
 
+    // Cubiomes' exact parameters
+    private static final int[] OCTAVES = { 7, 7, 7, 7, 7, 7 };
+    private static final double[] PERSISTENCE = { 0.5, 0.5, 0.5, 0.5, 0.5, 0.5 };
+    private static final double[] LACUNARITY = { 2.0, 2.0, 2.0, 2.0, 2.0, 2.0 };
+    private static final double[] AMPLITUDE = { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
+    private static final double[] SCALE = { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
+
     private final DoublePerlinNoise[] climateNoise;
     private final long seed;
     private final boolean largeBiomes;
@@ -21,91 +28,15 @@ public class BiomeNoise {
         Random random = new Random(seed);
         this.climateNoise = new DoublePerlinNoise[6];
 
-        // Initialize climate noise parameters
+        // Initialize climate noise parameters using Cubiomes' exact values
         for (int i = 0; i < 6; i++) {
-            // Each parameter has different octaves, persistence, and lacunarity
-            int octaves = getOctavesForParameter(i);
-            double persistence = getPersistenceForParameter(i);
-            double lacunarity = getLacunarityForParameter(i);
-            double amplitude = getAmplitudeForParameter(i);
-
-            climateNoise[i] = new DoublePerlinNoise(random, octaves, persistence, lacunarity, amplitude);
-        }
-    }
-
-    private int getOctavesForParameter(int param) {
-        switch (param) {
-            case NP_TEMPERATURE:
-                return 7;
-            case NP_HUMIDITY:
-                return 7;
-            case NP_CONTINENTALNESS:
-                return 7;
-            case NP_EROSION:
-                return 7;
-            case NP_WEIRDNESS:
-                return 7;
-            case NP_DEPTH:
-                return 7;
-            default:
-                return 7;
-        }
-    }
-
-    private double getPersistenceForParameter(int param) {
-        switch (param) {
-            case NP_TEMPERATURE:
-                return 0.5;
-            case NP_HUMIDITY:
-                return 0.5;
-            case NP_CONTINENTALNESS:
-                return 0.5;
-            case NP_EROSION:
-                return 0.5;
-            case NP_WEIRDNESS:
-                return 0.5;
-            case NP_DEPTH:
-                return 0.5;
-            default:
-                return 0.5;
-        }
-    }
-
-    private double getLacunarityForParameter(int param) {
-        switch (param) {
-            case NP_TEMPERATURE:
-                return 2.0;
-            case NP_HUMIDITY:
-                return 2.0;
-            case NP_CONTINENTALNESS:
-                return 2.0;
-            case NP_EROSION:
-                return 2.0;
-            case NP_WEIRDNESS:
-                return 2.0;
-            case NP_DEPTH:
-                return 2.0;
-            default:
-                return 2.0;
-        }
-    }
-
-    private double getAmplitudeForParameter(int param) {
-        switch (param) {
-            case NP_TEMPERATURE:
-                return 1.0;
-            case NP_HUMIDITY:
-                return 1.0;
-            case NP_CONTINENTALNESS:
-                return 1.0;
-            case NP_EROSION:
-                return 1.0;
-            case NP_WEIRDNESS:
-                return 1.0;
-            case NP_DEPTH:
-                return 1.0;
-            default:
-                return 1.0;
+            long paramSeed = random.nextLong();
+            climateNoise[i] = new DoublePerlinNoise(
+                    new Random(paramSeed),
+                    OCTAVES[i],
+                    PERSISTENCE[i],
+                    LACUNARITY[i],
+                    AMPLITUDE[i]);
         }
     }
 
@@ -120,10 +51,15 @@ public class BiomeNoise {
 
         // Sample each climate parameter with scaled coordinates
         for (int i = 0; i < 6; i++) {
-            // Get raw noise value with different scales for each parameter
-            double noise = climateNoise[i].noise(scaledX * 0.1, 64 * 0.1, scaledZ * 0.1);
-            // Normalize to 0-1 range
-            params[i] = Math.max(0.0, Math.min(1.0, (noise + 1.0) / 2.0));
+            // Get raw noise value with Cubiomes' exact scaling
+            double noise = climateNoise[i].noise(
+                    scaledX * SCALE[i] * 0.1,
+                    y * SCALE[i] * 0.1,
+                    scaledZ * SCALE[i] * 0.1);
+            // Normalize to 0-1 range using Cubiomes' approach
+            params[i] = (noise + 1.0) * 0.5;
+            // Clamp to 0-1 range
+            params[i] = Math.max(0.0, Math.min(1.0, params[i]));
         }
 
         return params;

@@ -2,10 +2,12 @@ package cubeium.cubeium.commands;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.LongArgumentType;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.text.Text;
 import cubeium.cubeium.generator.BiomeGenerator;
 import cubeium.cubeium.noise.BiomeNoise;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 
 public class BiomeCommand {
         private static String getBiomeName(int biomeId) {
@@ -144,12 +146,10 @@ public class BiomeCommand {
         }
 
         public static void register(CommandDispatcher<FabricClientCommandSource> dispatcher) {
-                dispatcher.register(net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal("testbiome")
-                                .then(net.fabricmc.fabric.api.client.command.v2.ClientCommandManager
-                                                .argument("x", IntegerArgumentType.integer())
-                                                .then(net.fabricmc.fabric.api.client.command.v2.ClientCommandManager
-                                                                .argument("y", IntegerArgumentType.integer())
-                                                                .then(net.fabricmc.fabric.api.client.command.v2.ClientCommandManager
+                dispatcher.register(ClientCommandManager.literal("testbiome")
+                                .then(ClientCommandManager.argument("x", IntegerArgumentType.integer())
+                                                .then(ClientCommandManager.argument("y", IntegerArgumentType.integer())
+                                                                .then(ClientCommandManager
                                                                                 .argument("z", IntegerArgumentType
                                                                                                 .integer())
                                                                                 .executes(context -> {
@@ -163,11 +163,9 @@ public class BiomeCommand {
                                                                                                         .getInteger(context,
                                                                                                                         "z");
 
-                                                                                        // Get the world seed from the
-                                                                                        // client
-                                                                                        long worldSeed = 3227429997367034446L; // Hardcoded
-                                                                                                                               // test
-                                                                                                                               // seed
+                                                                                        // Use a hardcoded seed for
+                                                                                        // testing
+                                                                                        long worldSeed = 12345L;
 
                                                                                         // Create a new biome generator
                                                                                         BiomeGenerator generator = new BiomeGenerator(
@@ -183,50 +181,156 @@ public class BiomeCommand {
                                                                                         BiomeNoise biomeNoise = new BiomeNoise(
                                                                                                         worldSeed,
                                                                                                         false);
-                                                                                        double[] params = biomeNoise
+
+                                                                                        double[] climateParams = biomeNoise
                                                                                                         .getClimateParameters(
                                                                                                                         x,
                                                                                                                         y,
                                                                                                                         z);
-                                                                                        double temperature = params[0];
-                                                                                        double humidity = params[1];
-                                                                                        double continentalness = params[2];
-                                                                                        double erosion = params[3];
-                                                                                        double weirdness = params[4];
-                                                                                        double depth = params[5];
 
-                                                                                        // Send the result back to the
+                                                                                        String biomeName = getBiomeName(
+                                                                                                        biomeId);
+
+                                                                                        // Send the results to the
                                                                                         // player
                                                                                         context.getSource()
                                                                                                         .sendFeedback(Text
-                                                                                                                        .literal(String.format(
-                                                                                                                                        "Biome at (%d, %d, %d): %s\n"
-                                                                                                                                                        +
-                                                                                                                                                        "Climate Parameters:\n"
-                                                                                                                                                        +
-                                                                                                                                                        "Temperature: %.4f\n"
-                                                                                                                                                        +
-                                                                                                                                                        "Humidity: %.4f\n"
-                                                                                                                                                        +
-                                                                                                                                                        "Continentalness: %.4f\n"
-                                                                                                                                                        +
-                                                                                                                                                        "Erosion: %.4f\n"
-                                                                                                                                                        +
-                                                                                                                                                        "Weirdness: %.4f\n"
-                                                                                                                                                        +
-                                                                                                                                                        "Depth: %.4f",
-                                                                                                                                        x,
-                                                                                                                                        y,
-                                                                                                                                        z,
-                                                                                                                                        getBiomeName(biomeId),
-                                                                                                                                        temperature,
-                                                                                                                                        humidity,
-                                                                                                                                        continentalness,
-                                                                                                                                        erosion,
-                                                                                                                                        weirdness,
-                                                                                                                                        depth)));
+                                                                                                                        .literal(
+                                                                                                                                        "Biome at (" + x + ", "
+                                                                                                                                                        + y
+                                                                                                                                                        + ", "
+                                                                                                                                                        + z
+                                                                                                                                                        + "): "
+                                                                                                                                                        + biomeName
+                                                                                                                                                        + " (ID: "
+                                                                                                                                                        + biomeId
+                                                                                                                                                        + ")"));
+
+                                                                                        context.getSource()
+                                                                                                        .sendFeedback(Text
+                                                                                                                        .literal("Climate parameters:"));
+                                                                                        context.getSource()
+                                                                                                        .sendFeedback(Text
+                                                                                                                        .literal(
+                                                                                                                                        "  Temperature: "
+                                                                                                                                                        + climateParams[0]));
+                                                                                        context.getSource()
+                                                                                                        .sendFeedback(Text
+                                                                                                                        .literal(
+                                                                                                                                        "  Humidity: " + climateParams[1]));
+                                                                                        context.getSource()
+                                                                                                        .sendFeedback(Text
+                                                                                                                        .literal(
+                                                                                                                                        "  Continentalness: "
+                                                                                                                                                        + climateParams[2]));
+                                                                                        context.getSource()
+                                                                                                        .sendFeedback(Text
+                                                                                                                        .literal(
+                                                                                                                                        "  Erosion: " + climateParams[3]));
+                                                                                        context.getSource()
+                                                                                                        .sendFeedback(Text
+                                                                                                                        .literal(
+                                                                                                                                        "  Weirdness: " + climateParams[4]));
+                                                                                        context.getSource()
+                                                                                                        .sendFeedback(Text
+                                                                                                                        .literal(
+                                                                                                                                        "  Depth: " + climateParams[5]));
 
                                                                                         return 1;
-                                                                                })))));
+                                                                                })
+                                                                                .then(ClientCommandManager.argument(
+                                                                                                "seed",
+                                                                                                LongArgumentType.longArg())
+                                                                                                .executes(context -> {
+                                                                                                        int x = IntegerArgumentType
+                                                                                                                        .getInteger(context,
+                                                                                                                                        "x");
+                                                                                                        int y = IntegerArgumentType
+                                                                                                                        .getInteger(context,
+                                                                                                                                        "y");
+                                                                                                        int z = IntegerArgumentType
+                                                                                                                        .getInteger(context,
+                                                                                                                                        "z");
+                                                                                                        long worldSeed = LongArgumentType
+                                                                                                                        .getLong(context,
+                                                                                                                                        "seed");
+
+                                                                                                        // Create a new
+                                                                                                        // biome
+                                                                                                        // generator
+                                                                                                        BiomeGenerator generator = new BiomeGenerator(
+                                                                                                                        worldSeed,
+                                                                                                                        false);
+
+                                                                                                        // Get the biome
+                                                                                                        // ID
+                                                                                                        int biomeId = generator
+                                                                                                                        .getBiome(x, y, z);
+
+                                                                                                        // Get the
+                                                                                                        // climate
+                                                                                                        // parameters
+                                                                                                        // for debugging
+                                                                                                        BiomeNoise biomeNoise = new BiomeNoise(
+                                                                                                                        worldSeed,
+                                                                                                                        false);
+
+                                                                                                        double[] climateParams = biomeNoise
+                                                                                                                        .getClimateParameters(
+                                                                                                                                        x,
+                                                                                                                                        y,
+                                                                                                                                        z);
+
+                                                                                                        String biomeName = getBiomeName(
+                                                                                                                        biomeId);
+
+                                                                                                        // Send the
+                                                                                                        // results to
+                                                                                                        // the player
+                                                                                                        context.getSource()
+                                                                                                                        .sendFeedback(Text
+                                                                                                                                        .literal(
+                                                                                                                                                        "Biome at (" + x + ", "
+                                                                                                                                                                        + y
+                                                                                                                                                                        + ", "
+                                                                                                                                                                        + z
+                                                                                                                                                                        + "): "
+                                                                                                                                                                        + biomeName
+                                                                                                                                                                        + " (ID: "
+                                                                                                                                                                        + biomeId
+                                                                                                                                                                        + ")"));
+
+                                                                                                        context.getSource()
+                                                                                                                        .sendFeedback(Text
+                                                                                                                                        .literal("Climate parameters:"));
+                                                                                                        context.getSource()
+                                                                                                                        .sendFeedback(Text
+                                                                                                                                        .literal(
+                                                                                                                                                        "  Temperature: "
+                                                                                                                                                                        + climateParams[0]));
+                                                                                                        context.getSource()
+                                                                                                                        .sendFeedback(Text
+                                                                                                                                        .literal(
+                                                                                                                                                        "  Humidity: " + climateParams[1]));
+                                                                                                        context.getSource()
+                                                                                                                        .sendFeedback(Text
+                                                                                                                                        .literal(
+                                                                                                                                                        "  Continentalness: "
+                                                                                                                                                                        + climateParams[2]));
+                                                                                                        context.getSource()
+                                                                                                                        .sendFeedback(Text
+                                                                                                                                        .literal(
+                                                                                                                                                        "  Erosion: " + climateParams[3]));
+                                                                                                        context.getSource()
+                                                                                                                        .sendFeedback(Text
+                                                                                                                                        .literal(
+                                                                                                                                                        "  Weirdness: " + climateParams[4]));
+                                                                                                        context.getSource()
+                                                                                                                        .sendFeedback(Text
+                                                                                                                                        .literal(
+                                                                                                                                                        "  Depth: " + climateParams[5]));
+
+                                                                                                        return 1;
+                                                                                                }))))));
         }
 }

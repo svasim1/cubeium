@@ -3,7 +3,9 @@ package cubeium.cubeium.noise;
 import java.util.Random;
 
 public class PerlinNoise {
-    private final int[] p = new int[256];
+    private static final int PSIZE = 512;
+    private static final int PMASK = 511;
+    private final int[] p = new int[PSIZE];
     private final double amplitude;
     private final double lacunarity;
     private final double persistence;
@@ -15,15 +17,37 @@ public class PerlinNoise {
         this.lacunarity = lacunarity;
         this.amplitude = amplitude;
 
-        // Initialize permutation array
+        // Initialize permutation array using Cubiomes' approach
         for (int i = 0; i < 256; i++) {
             p[i] = i;
         }
-        for (int i = 0; i < 256; i++) {
-            int j = random.nextInt(256 - i) + i;
+        for (int i = 255; i > 0; i--) {
+            int j = random.nextInt(i + 1);
             int temp = p[i];
             p[i] = p[j];
             p[j] = temp;
+        }
+        // Copy to upper half
+        for (int i = 0; i < 256; i++) {
+            p[i + 256] = p[i];
+        }
+    }
+
+    public void setSeed(long seed) {
+        Random random = new Random(seed);
+        // Initialize permutation array using Cubiomes' approach
+        for (int i = 0; i < 256; i++) {
+            p[i] = i;
+        }
+        for (int i = 255; i > 0; i--) {
+            int j = random.nextInt(i + 1);
+            int temp = p[i];
+            p[i] = p[j];
+            p[j] = temp;
+        }
+        // Copy to upper half
+        for (int i = 0; i < 256; i++) {
+            p[i + 256] = p[i];
         }
     }
 
@@ -44,55 +68,65 @@ public class PerlinNoise {
     }
 
     private double interpolatedNoise(double x, double y, double z) {
-        int intX = (int) Math.floor(x) & 255;
-        int intY = (int) Math.floor(y) & 255;
-        int intZ = (int) Math.floor(z) & 255;
+        int xi = (int) Math.floor(x) & PMASK;
+        int yi = (int) Math.floor(y) & PMASK;
+        int zi = (int) Math.floor(z) & PMASK;
 
-        double fracX = x - Math.floor(x);
-        double fracY = y - Math.floor(y);
-        double fracZ = z - Math.floor(z);
+        double xf = x - Math.floor(x);
+        double yf = y - Math.floor(y);
+        double zf = z - Math.floor(z);
 
-        // Ensure all array accesses are properly bounded
-        int A = p[intX] & 255;
-        int AA = p[(A + intY) & 255] & 255;
-        int AB = p[(A + ((intY + 1) & 255)) & 255] & 255;
-        int B = p[(intX + 1) & 255] & 255;
-        int BA = p[(B + intY) & 255] & 255;
-        int BB = p[(B + ((intY + 1) & 255)) & 255] & 255;
+        double u = fade(xf);
+        double v = fade(yf);
+        double w = fade(zf);
 
-        // Ensure all array accesses are properly bounded for the Z dimension
-        double v1 = grad(p[(AA + intZ) & 255], fracX, fracY, fracZ);
-        double v2 = grad(p[(BA + intZ) & 255], fracX - 1, fracY, fracZ);
-        double v3 = grad(p[(AB + intZ) & 255], fracX, fracY - 1, fracZ);
-        double v4 = grad(p[(BB + intZ) & 255], fracX - 1, fracY - 1, fracZ);
-        double v5 = grad(p[(AA + ((intZ + 1) & 255)) & 255], fracX, fracY, fracZ - 1);
-        double v6 = grad(p[(BA + ((intZ + 1) & 255)) & 255], fracX - 1, fracY, fracZ - 1);
-        double v7 = grad(p[(AB + ((intZ + 1) & 255)) & 255], fracX, fracY - 1, fracZ - 1);
-        double v8 = grad(p[(BB + ((intZ + 1) & 255)) & 255], fracX - 1, fracY - 1, fracZ - 1);
+        // Apply mask to all permutation indices to ensure they stay within bounds
+        int aaa = p[(p[(p[xi & PMASK] & PMASK) + (yi & PMASK)] & PMASK) + (zi & PMASK)];
+        int aba = p[(p[(p[xi & PMASK] & PMASK) + ((yi + 1) & PMASK)] & PMASK) + (zi & PMASK)];
+        int aab = p[(p[(p[xi & PMASK] & PMASK) + (yi & PMASK)] & PMASK) + ((zi + 1) & PMASK)];
+        int abb = p[(p[(p[xi & PMASK] & PMASK) + ((yi + 1) & PMASK)] & PMASK) + ((zi + 1) & PMASK)];
+        int baa = p[(p[(p[(xi + 1) & PMASK] & PMASK) + (yi & PMASK)] & PMASK) + (zi & PMASK)];
+        int bba = p[(p[(p[(xi + 1) & PMASK] & PMASK) + ((yi + 1) & PMASK)] & PMASK) + (zi & PMASK)];
+        int bab = p[(p[(p[(xi + 1) & PMASK] & PMASK) + (yi & PMASK)] & PMASK) + ((zi + 1) & PMASK)];
+        int bbb = p[(p[(p[(xi + 1) & PMASK] & PMASK) + ((yi + 1) & PMASK)] & PMASK) + ((zi + 1) & PMASK)];
 
-        double i1 = interpolate(v1, v2, fade(fracX));
-        double i2 = interpolate(v3, v4, fade(fracX));
-        double i3 = interpolate(v5, v6, fade(fracX));
-        double i4 = interpolate(v7, v8, fade(fracX));
+        double x1 = lerp(grad(aaa, xf, yf, zf),
+                grad(baa, xf - 1, yf, zf),
+                u);
+        double x2 = lerp(grad(aba, xf, yf - 1, zf),
+                grad(bba, xf - 1, yf - 1, zf),
+                u);
+        double y1 = lerp(x1, x2, v);
 
-        double j1 = interpolate(i1, i2, fade(fracY));
-        double j2 = interpolate(i3, i4, fade(fracY));
+        double x3 = lerp(grad(aab, xf, yf, zf - 1),
+                grad(bab, xf - 1, yf, zf - 1),
+                u);
+        double x4 = lerp(grad(abb, xf, yf - 1, zf - 1),
+                grad(bbb, xf - 1, yf - 1, zf - 1),
+                u);
+        double y2 = lerp(x3, x4, v);
 
-        return interpolate(j1, j2, fade(fracZ));
+        return lerp(y1, y2, w);
     }
 
     private double grad(int hash, double x, double y, double z) {
-        int h = hash & 15;
-        double u = h < 8 ? x : y;
-        double v = h < 4 ? y : h == 12 || h == 14 ? x : z;
-        return ((h & 1) == 0 ? u : -u) + ((h & 2) == 0 ? v : -v);
+        // Convert hash to 0-15 range
+        hash = hash & 15;
+
+        // Get direction vector components based on hash
+        double u = hash < 8 ? x : y;
+        double v = hash < 4 ? y : (hash == 12 || hash == 14) ? x : z;
+
+        // Determine signs based on lowest 2 bits
+        return ((hash & 1) == 0 ? u : -u) + ((hash & 2) == 0 ? v : -v);
     }
 
     private double fade(double t) {
+        // Improved Perlin fade function: 6t^5 - 15t^4 + 10t^3
         return t * t * t * (t * (t * 6 - 15) + 10);
     }
 
-    private double interpolate(double a, double b, double t) {
+    private double lerp(double a, double b, double t) {
         return a + t * (b - a);
     }
 }

@@ -1,0 +1,383 @@
+
+research
+
+We value your opinion and strive to make your experience better. Help us improve by answering our 5-minute survey
+CLICK HERE TO TAKE THE SURVEY
+Start a Wiki
+Sign In
+Minecraft Wiki
+Minecraft Wiki
+
+    Explore
+    Games
+    Minecraft
+    Minecraft Dungeons
+    Wiki Community
+
+Sign In
+Fan Central
+Current
+Recent
+Mountains
+Biome
+Your Shop
+Skip to content
+Minecraft Wiki
+Minecraft Wiki
+7,492
+pages
+
+    Explore
+    Games
+    Minecraft
+    Minecraft Dungeons
+    Wiki Community
+
+English	
+Seed (level generation)	
+Talk
+View source
+
+Seeds are values made up of character(s) (including negative or positive integers) that are used as the basis for generating every Minecraft world.[1]
+Contents
+
+    1 Compatibility
+    2 World generation
+    3 Determining the seed
+    4 Technical
+        4.1 Realms
+        4.2 General
+        4.3 Overlap between editions
+        4.4 Generation quirks
+            4.4.1 Changing terrain without changing some structures
+            4.4.2 Repetition
+    5 Video
+    6 History
+    7 Trivia
+        7.1 Notable Java Edition seeds
+    8 References
+    9 External links
+        9.1 Bedrock and Java Editions
+        9.2 Java Edition only
+
+Compatibility
+
+Seeds are somewhat compatible across editions, with terrain generation and biomes being the same. However, structure locations still remain different between Java Edition and Bedrock Edition.
+World generation
+
+Whenever the game has to generate a new world, it calls upon an algorithm known as Perlin noise. This algorithm outputs a pseudo-random value that is then used to determine the characteristics and features of the world. However, the algorithm always outputs the same value each time for a constant starting point (seed). Thus, the same seed generates the same terrain every time.
+
+A world's seed is set when that world is created. By default, it is decided automatically, but it can also be set manually. Setting and reusing a seed from one world generates the same world. Either a number or a word/phrase can be used, including negatives. If a word/phrase is used, it is converted into a 32-bit integer.
+
+Whenever the world generation algorithm is updated (usually by adding new biomes to the game), the same seed no longer generates the same terrain. If the seed or generator changes in a saved world, new chunks are based on the new seed and no longer match those from the old seed. Deleted chunks can regenerate if the seed and generator remain the same, but changes if either the seed or generator changes. In fact, deleting chunks is sometimes done to let newly-introduced features appear in an old world; see Tutorials/Updating old oceans in 1.13 using MCEdit.
+
+Because seeds are simply random values read into an algorithm and not actually names of different worlds, using a certain seed does not result in a world with any relevance to the value of that seed. For instance, using a biome name as the seed does not necessarily result in the creation of a world with primarily that biome, nor does it spawn the player within the said biome.
+Determining the seed
+
+In Java Edition, the player can enter the command /seed to view the world's seed. This command is available in singleplayer worlds even if cheats are off. The player can also select 'Re-create' in the Worlds menu to see the seed.
+
+In Bedrock Edition, the seed can be found on the world options screen. There are also seed templates that offers the player several pre-set seeds to generate worlds with specific features near the spawn point. Additionally, the beta version has a visible seed on the top of the screen.
+Technical
+Realms
+
+In Java Edition, a player can type /seed in the chat. In Bedrock Edition, the seed is not visible when playing on Realms.
+General
+
+If the seed contains characters other than numbers or is greater than or equal to 20 characters in length, the Java String.hashCode() function is used to generate a number seed. This restricts Minecraft to a subset of the possible worlds to 232 (or 4,294,967,296), due to the int datatype used. Number seeds or a default world seed must be used to access the full set of possible worlds (264, or 18,446,744,073,709,551,616).
+Overlap between editions
+
+All Java and Bedrock Edition seeds in the range from -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807, generate the same terrain and biomes in both Java and Bedrock editions, although with differing structures, decorator placements, carver caves, and mob spawns.
+Generation quirks
+This section is missing information about Explain these phenomena considerably more in depth. 
+Please expand the section to include this information. Further details may exist on the talk page.
+
+Through certain seeds, it is possible to observe interesting effects.
+Changing terrain without changing some structures
+
+Only certain sections of the seed are used to generate specific features within the world. It is possible to generate multiple worlds with identical cave systems, Nether biomes and other arrangements of generated structures simply by converting the seed into binary and tweaking the desired bits.[2] An example is the seed generator using only the first 48 bits to generate cave systems and badlands clay banding layers.
+Repetition
+This section needs to be updated. 
+Please update this section to reflect recent updates or newly available information.
+Reason: Do this fixed in Caves & Cliffs: Part II? If not, please replace the seeds with the new one.
+Duplicate Caves
+
+Seed 164311266871034 in spectator mode. Caves are repetitive along the Z axis.
+Endlesscanyon wideangle
+
+Seed 1669320484 in Bedrock Edition, with repeating canyons.
+
+Certain seeds return 0 in the internal code,[3] causing infinite arrays of caves and other structures to generate.[4] In Java Edition, the seed 107038380838084 returns 0 on the first call and 164311266871034 returns 0 on the second call, causing mineshafts, caves and underwater ravines to loop on the X and Z axes respectively.[5]
+
+Features in seeds can repeat, such as decorations. These generate diagonally.[6]
+
+In Bedrock Edition, diagonal cave, ravine, dungeon, and decoration repetition occur with the seeds 289849025 and 1669320484.[7] Mineshaft generation repeats vertically in the seeds -1171867832 and 1000686894.[8]
+
+Any seed calculated as 4294967296 × n + 1669320484 also generate maps with repeating features.[7]
+Video
+
+History
+This section needs to be updated. 
+Please update this section to reflect recent updates or newly available information.
+Reason: Bedrock experimental changes
+Java Edition pre-Classic
+rd-160052	Added a simple level generator.
+Java Edition Classic
+0.0.12a	Added a new level generator.
+August 25, 2009	Showed another new level generator, which generates cliffs more commonly.
+Java Edition Indev
+0.31	20091223-2	Isometric level rendering screenshot added.
+20100106	The player can now select island, floating, flat, or original as the level type when generating a world.
+Players can also select square, long, or deep as the level shape.
+Players can also select small, normal, or huge as the level size.
+20100107	Deep floating maps now have layers of islands.
+Players can now select a level theme; normal or hell.
+20100110	Islands now generate with more sand.
+20100113	Oceans now generate with infinite water.
+20100122	Water now spawns naturally above sea level and on floating islands.
+Caves are now less flooded.
+Java Edition Infdev
+20100227-1	Terrain-breaking change to world gen: using any given seed on older versions now generates a different world.
+World generation has been greatly simplified (with the removal of sand, blobs) in order to make infinite world generation implementation easier to work with.
+20100227-2	Brick pyramid generation changed - they will now always come to a single point at the top, rather than sometimes being truncated, resulting in "brick square frusta".
+20100313	Oceans are considerably larger than before.[check the code]
+20100320	Reimplemented primitive ore blob generation, in which they spawn as scattered, single blocks.
+Reimplemented tree generation.
+20100325	Ore blob generation has been changed to the modern generation type. However, a float is used in their generation, causing their generation to break down at excessive distances.
+Added caves. They generate through all blocks, not just terrain blocks.
+20100327	Terrain-breaking change to world gen: using any given seed on older versions now generates a different world.
+World generation has been significantly overhauled, which is visually very obvious.
+Removed caves.
+Removed random patches of flowers.
+The large stone wall at 33,554,432 no longer generates. Instead, the Far Lands generate at 12,550,824.
+20100413	All trees are now large trees.
+Sand and gravel now generate with the world again.
+20100420	Terrain-breaking change to world gen: using any given seed on older versions now generates a different world.
+World generation seems considerably less mountainous.
+20100608	All trees are now small trees again - big trees do not generate.
+20100611	Terrain-breaking change to world gen: using any given seed on older versions now generates a different world.
+Terrain now appears to come in large islands.
+Terrain can now generate high enough to be higher than the world height limit, causing it to be cut off.
+Monoliths now have the potential to generate.[verify]
+The amount of trees that generate appears to be different now.
+20100616	Terrain-breaking change to world gen: using any given seed on older versions now generates a different world.
+Terrain generation in ocean[verify]
+Reimplemented caves.
+Random patches of flowers and mushrooms now generate.
+Springs now generate.
+Lava now naturally generates, although how it does so exactly is unknown.
+Java Edition Alpha
+v1.2.0	preview	Terrain-breaking change to world gen: using any given seed on older versions now generates a different world.
+Java Edition Beta
+1.3	It is now possible to manually determine the seed upon world creation.
+1.8	Pre-release	Terrain-breaking change to world gen.
+The debug screen now displays the seed number.
+Java Edition
+1.2.1	12w03a	Minor terrain-breaking change to world gen.
+12w07a	Seeds can no longer change biomes in existing worlds due to the Anvil file format.
+?	Multiplayer servers no longer send the seed to clients.
+1.3.1	12w18a	Due to singleplayer becoming multiplayer, the world's seed is no longer displayed on the debug screen.
+12w21a	Added /seed, which displays the current world seed.
+1.7.2	13w36a	Terrain-breaking change to world gen with the introduction of many new biomes.
+1.13	18w06a	World generator rewritten in a mostly non-breaking way.
+1.18	1.18 Experimental Snapshot 1	Terrain-breaking change to the world gen with the introduction of multinoise, terrain noise, biome builders, and new caves.
+Seed limit is now 48-bit.[9]
+1.18 experimental snapshot 2	World generator rewritten in a non-breaking way.
+21w41a	Replaced the random number generator used in world generation, which reverted the seed limit back to 64-bit.[9]
+Seeds have been reshuffled due to this change. Worlds will not look like as they did in previous snapshots.
+21w43a	Seeds have been reshuffled again. Worlds will not look like as they did in previous snapshots.
+1.18.2	22w03a	The seed "0" (zero) can now be used normally.
+Any spaces before or after an inputted seed will now be trimmed.
+Pocket Edition Alpha
+v0.1.0	Added seeds.
+v0.9.0	build 1	Terrain-breaking change to world gen: using any given seed on older versions now generates a different world.
+Bedrock Edition
+1.18.0	beta 1.18.0.20	Terrain-breaking change to the world gen. Revamp Caves, Mountains, and Terrain height system.
+beta 1.18.0.22	Replaced the random number generator used in world generation, resulting in different terrain being generated using same seed.
+beta 1.18.0.24	Seeds have been reshuffled again. Worlds will not look like as they did in previous betas.
+1.18.30	beta 1.18.20.21	Worlds can now be created with 64-bit seeds.
+Single-digit seeds such as "0" can now be used normally.
+Legacy Console Edition
+TU1	CU1	1.00 	Patch 1	1.0.1	Added seeds (64-bit).
+TU5	Terrain-breaking change to world gen.
+TU12	Minor terrain-breaking change to world gen. Biome info is now saved to worlds instead of recalculated when biome generation changes.
+TU31	CU19	1.22 	Patch 3	Terrain-breaking change to world gen.
+New Nintendo 3DS Edition
+0.1.0	Added seeds.
+Trivia
+Notable Java Edition seeds
+
+The following map seeds have, at one point or another, been used for generating official Minecraft maps and resources or otherwise significant community material.
+
+    The Java Edition demo world seed can be played in the full version by entering North Carolina in the seed input.
+    The PC Gamer demo world seed can be played in the appropriate era by entering glacier, all lowercase unlike the famous seed where the G is capitalized, in the seed input.
+    The seed for each title screen panorama are as follows:
+        The panorama used between Beta 1.8 Pre-release and 18w22c is either 2151901553968352745 or 8091867987493326313,[10] generated between Beta 1.6.6 and Beta 1.7.
+        The panorama used for Java Edition 1.13 is 1458140401, which is the seed resulting from typing 18w22a in as a seed, generated in snapshot 18w22a.
+        Java Edition 1.14 is 2802867088795589976, taken in 18w48a.
+        Java Edition 1.15 is -4404205509303106230, taken in 19w40a.
+        Java Edition 1.16 is 6006096527635909600, taken in 20w13a.
+        Java Edition 1.18 is 2151901553968352745, taken in 21w40a.
+        The panorama used for Java Edition 1.19 is -1696067516, which is the seed resulting from typing thewildupdate in as a seed, generated in snapshot 22w15a.
+        Java Edition 1.20 is 8554477380691140270, taken in 23w14a.
+    The seed for the original pack.png file is 3257840388504953787, generated in Alpha v1.2.2, and is also Minecraft Bedrock Edition's New UI of Create New World's Example Seed since Bedrock Edition beta 1.18.20.21 and this seed spawns you in a Savanna Biome in Position: -208, 65, 0 with these structures and other biomes since Bedrock beta 1.18.20.21.[11] It can also be generated between Alpha v1.2.0 and Beta 1.7.3 with minor population differences.
+    The seed for the Skull on Fire painting is either -6984854390176336655 or -1044887956651363087, generated in Alpha v1.1.2_01 or prior.[12]
+    The seed used for the original Herobrine doctored screenshot is 478868574082066804, generated in Alpha v1.0.16_02.
+    The seed used for the original Herobrine hoax livestream is 3609313613745973624, generated in Alpha v1.0.17_04.
+
+References
+
+A Sohrt Demystification of the 'Map Seed' - Jens Bergensten on Mojang.com; February 23, 2011
+https://www.minecraftforum.net/forums/minecraft-java-edition/seeds/2229720-can-two-different-seeds-produce-identical-worlds
+http://stackoverflow.com/questions/3065554/can-javas-random-function-be-zero
+MC-111378
+https://www.reddit.com/r/MCPE/comments/5i6sae/recursive_infinite_mineshaft_seeds_on_mcpe/
+https://www.youtube.com/watch?v=UtNXUMrSIxQ
+MCPE-95011
+MCPE-114472
+MC-236650
+https://www.reddit.com/r/Minecraft/comments/hthrmk/big_news_we_have_found_the_seed_of_minecrafts/
+https://www.reddit.com/r/MinecraftAtHome/comments/iocx6f/packpng_seed_was_found_explanation_tutorial_and
+
+    https://www.reddit.com/r/Minecraft/comments/iqg3ey/the_original_screenshot_seed_of_the_minecraft/
+
+External links
+Bedrock and Java Editions
+
+    Chunkbase Minecraft Apps: Online seed/map explorer tool
+    Minecraft Seeds on Reddit: Community-driven Minecraft Seeds
+    Minecraft Seeds: Community-driven Minecraft Seeds
+    LookingForSeed: Find Minecraft seeds from various categories
+    Minemap.org: High resolution maps for good seeds for the Java and Windows 10 (Bedrock) Edition
+
+Java Edition only
+
+    Random Seed Reader: Local Java tool
+    Minecraft SeedHunt: Selected Seeds from various categories for Java 1.16
+    Minecraft Seeds Java Edition: New Seeds for 1.16.4 Version
+    SeedCracker: guess a seed from a multiplayer server
+    Seeder: Seed/map explorer tool and finder for Java
+
+Minecraft
+Help 	
+
+    Controls Options Tutorials Common myths
+
+Menu screens 	
+Aspects 	
+
+    Background
+        Panorama Logo Splash
+
+Examples 	
+
+    Main menu World selection menu
+        Create New World Pause menu
+
+Game customization 	
+
+    Addons Capes Data packs Resource packs
+        Texture packs Texture atlas Skins
+
+Editions 	
+Java 	
+
+    Demo
+        Locations PC Gamer demo
+
+Bedrock 	
+Merged 	
+
+    Pocket Edition Windows 10 Edition
+
+Ports to consoles 	
+
+    Xbox One Nintendo Switch PlayStation 4
+        PlayStation VR
+
+Discontinued 	
+
+    Gear VR Edition Apple TV Edition Fire TV Edition
+
+Other 	
+
+    Minecraft Education China Edition Minecraft Classic
+
+Discontinued 	
+Legacy Console 	
+
+    Xbox 360 Edition Xbox One Edition PlayStation 3 Edition PlayStation 4 Edition
+    PlayStation Vita Edition Wii U Edition Nintendo Switch Edition
+
+Other 	
+
+    Minecraft 4k MinecraftEdu Pi Edition New Nintendo 3DS Edition
+
+Miscellaneous 	
+
+    Easter eggs End Poem Herobrine Version formats Minecraft Launcher Minecraft Preview Minecraft franchise
+
+Categories
+Languages
+Community content is available under CC BY-NC-SA unless otherwise noted.
+More Fandoms
+
+    Fantasy Minecraft 
+
+Recent Images
+
+    Minecraft Main Title 1.21.5.png
+    Java Edition 1.21.5
+    21 hours ago
+    The Spring to Life drop experience new wonders of the Overworld! Minecraft.jpg
+    Player
+    a day ago
+    Iamsteve.png
+    Player
+    3 days ago
+
+Fandom logo
+Explore properties
+
+    Fandom
+    Muthead
+    Fanatical
+
+Follow Us
+
+Overview
+
+    What is Fandom?
+    About
+    Careers
+    Press
+    Contact
+    Terms of Use
+    Privacy Policy
+    Digital Services Act
+    Global Sitemap
+    Local Sitemap
+    Manage Preferences
+
+Community
+
+    Community Central
+    Support
+    Help
+
+Advertise
+
+    Media Kit
+    Contact
+
+Fandom Apps
+Take your favorite fandoms with you and never miss a beat.
+Fandom App logo
+
+    Store icon
+    Store icon
+
+Minecraft Wiki is a FANDOM Games Community.
+View Mobile Site
+Check out Fandom Quizzes and challenge your friends!
+Search this wiki
+Search all wikis
