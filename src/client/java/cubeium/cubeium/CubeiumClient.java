@@ -1,8 +1,10 @@
 package cubeium.cubeium;
 
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.minecraft.text.Text;
+import cubeium.cubeium.commands.BiomeCommand;
 
 public class CubeiumClient implements ClientModInitializer {
     @Override
@@ -25,12 +27,18 @@ public class CubeiumClient implements ClientModInitializer {
                 }
 
                 try {
-                    client.setScreen(new SeedMapScreen());
+                    long worldSeed = 3227429997367034446L; // Hardcoded test seed
+                    client.setScreen(new SeedMapScreen(client, worldSeed));
                     Cubeium.LOGGER.info("Screen set successfully");
                 } catch (Exception e) {
                     Cubeium.LOGGER.error("Failed to set screen: " + e.getMessage());
                 }
             }
+        });
+
+        // Register commands
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
+            BiomeCommand.register(dispatcher);
         });
 
         Cubeium.LOGGER.info("Client initialization complete!");
