@@ -41,8 +41,262 @@ dependencies {
 	
 }
 
+// ========================================
+// Native Library (Cubiomes) Build Tasks
+// ========================================
+
+def cubiomesDir = file('cubiomes')
+def cubiomesBuildDir = file("${cubiomesDir}/build")
+def cubiomesLibDir = file("${cubiomesDir}/lib")
+def nativeResourcesDir = file('src/main/resources/natives')
+
+// Detect operating system and architecture
+def getOSName() {
+	def os = System.getProperty('os.name').toLowerCase()
+	if (os.contains('windows')) {
+		return 'windows'
+	} else if (os.contains('linux')) {
+		return 'linux'
+	} else if (os.contains('mac') || os.contains('darwin')) {
+		return 'macos'
+	} else {
+		return 'unknown'
+	}
+}
+
+def getArchName() {
+	def arch = System.getProperty('os.arch').toLowerCase()
+	if (arch.contains('amd64') || arch.contains('x86_64')) {
+		return 'x64'
+	} else if (arch.contains('aarch64') || arch.contains('arm64')) {
+		return 'arm64'
+	} else if (arch.contains('x86') || arch.contains('i386')) {
+		return 'x86'
+	} else {
+		return arch
+	}
+}
+
+def osName = getOSName()
+def archName = getArchName()
+
+// Task to configure CMake
+task configureCubiomes(type: Exec) {
+	group = 'native'
+	description = 'Configure cubiomes library with CMake'
+	
+	workingDir cubiomesDir
+	
+	doFirst {
+		cubiomesBuildDir.mkdirs()
+		
+		// Check if cmake is available
+		try {
+			def result = ['cmake', '--version'].execute()
+			result.waitFor()
+			if (result.exitValue() != 0) {
+				throw new GradleException("CMake is not available. Please install CMake and add it to your PATH.")
+			}
+		} catch (IOException e) {
+			throw new GradleException("CMake is not available. Please install CMake and add it to your PATH.\n" +
+				"Windows: Download from https://cmake.org/download/\n" +
+				"macOS: brew install cmake\n" +
+				"Linux: sudo apt install cmake (Ubuntu/Debian) or sudo yum install cmake (CentOS/RHEL)")
+		}
+	}
+	
+	if (osName == 'windows') {
+		// For Windows with GCC, use MinGW Makefiles generator
+		commandLine 'cmake', '-B', 'build', '-S', '.', '-G', 'MinGW Makefiles', '-DCMAKE_BUILD_TYPE=Release'
+	} else {
+		commandLine 'cmake', '-B', 'build', '-S', '.', '-DCMAKE_BUILD_TYPE=Release'
+	}
+	
+	inputs.files fileTree(cubiomesDir) {
+		include '*.c', '*.h', 'CMakeLists.txt'
+	}
+	outputs.dir cubiomesBuildDir
+}
+
+// Task to build cubiomes library
+task buildCubiomes(type: Exec) {
+	group = 'native'
+	description = 'Build cubiomes shared library'
+	dependsOn configureCubiomes
+	
+	workingDir cubiomesDir
+	
+	if (osName == 'windows') {
+		commandLine 'cmake', '--build', 'build', '--config', 'Release'
+	} else {
+		commandLine 'cmake', '--build', 'build', '--config', 'Release', '--', '-j4'
+	}
+	
+	inputs.files fileTree(cubiomesDir) {
+		include '*.c', '*.h', 'CMakeLists.txt'
+	}
+	outputs.dir cubiomesLibDir
+}
+
+// Task to copy native libraries to resources
+task copyNativeLibraries(type: Copy) {
+	group = 'native'
+	description = 'Copy native libraries to resources directory'
+	dependsOn buildCubiomes
+	
+	from cubiomesLibDir
+	into "${nativeResourcesDir}/${osName}/${archName}"
+	
+	if (osName == 'windows') {
+		include '*.dll'
+	} else if (osName == 'macos') {
+		include '*.dylib'
+	} else {
+		include '*.so'
+	}
+	
+	doFirst {
+		nativeResourcesDir.mkdirs()
+	}
+}
+
+// Task to clean cubiomes build artifacts
+task cleanCubiomes(type: Delete) {
+	group = 'native'
+	description = 'Clean cubiomes build artifacts'
+	delete cubiomesBuildDir
+	delete cubiomesLibDir
+	delete nativeResourcesDir
+}
+
+// Task to generate JNI headers
+task generateJNIHeaders {
+	group = 'native'
+	description = 'Generate JNI headers for native methods'
+	dependsOn compileClientJava
+	
+	def jniHeadersDir = file("${cubiomesDir}/jni")
+	def clientClassesDir = file('build/classes/java/client')
+	
+	doFirst {
+		jniHeadersDir.mkdirs()
+	}
+	
+	doLast {
+		println "Generating JNI headers to: ${jniHeadersDir}"
+		
+		// Use javac -h with minimal classpath - just compile the single file
+		exec {
+			workingDir project.rootDir
+			
+			// Create a minimal classpath with only essential dependencies
+			def minimalCp = configurations.compileClasspath.filter { 
+				it.name.contains('slf4j') || it.name.contains('fabric-api')
+			}.asPath
+			
+			commandLine 'javac', 
+				'-h', jniHeadersDir.absolutePath,
+				'-cp', minimalCp,
+				'-d', clientClassesDir.absolutePath,
+				'src/client/java/cubeium/cubeium/world/CubiomesInterface.java',
+				'src/client/java/cubeium/cubeium/world/NativeLibraryLoader.java'
+		}
+	}
+	
+	inputs.files fileTree('src/client/java/cubeium/cubeium/world') {
+		include '*.java'
+	}
+	outputs.dir jniHeadersDir
+}
+
+// Task to check native build requirements
+task checkNativeBuildRequirements {
+	group = 'native'
+	description = 'Check if native build requirements are met'
+	
+	doLast {
+		println "Checking native build requirements..."
+		
+		// Check CMake
+		try {
+			def result = ['cmake', '--version'].execute()
+			result.waitFor()
+			if (result.exitValue() == 0) {
+				def version = result.text.readLines()[0]
+				println "✓ CMake found: ${version}"
+			} else {
+				println "✗ CMake not working properly"
+			}
+		} catch (Exception e) {
+			println "✗ CMake not found"
+			println "  Please install CMake from https://cmake.org/download/"
+			println "  Or see NATIVE_SETUP.md for detailed instructions"
+		}
+		
+		// Check compiler
+		if (osName == 'windows') {
+			println "Platform: Windows ${archName}"
+			println "Compiler: Visual Studio or MinGW-w64 required"
+		} else if (osName == 'macos') {
+			println "Platform: macOS ${archName}"
+			try {
+				def result = ['clang', '--version'].execute()
+				result.waitFor()
+				if (result.exitValue() == 0) {
+					println "✓ Clang compiler found"
+				}
+			} catch (Exception e) {
+				println "✗ Clang not found - install Xcode command line tools"
+			}
+		} else if (osName == 'linux') {
+			println "Platform: Linux ${archName}"
+			try {
+				def result = ['gcc', '--version'].execute()
+				result.waitFor()
+				if (result.exitValue() == 0) {
+					println "✓ GCC compiler found"
+				}
+			} catch (Exception e) {
+				println "✗ GCC not found - install build-essential"
+			}
+		}
+		
+		println "\nTo build native libraries, run: ./gradlew buildCubiomes"
+		println "For setup instructions, see: NATIVE_SETUP.md"
+	}
+}
+
+// Make native library building part of the main build process (but only if CMake is available)
+// For development without CMake, you can skip native compilation with: ./gradlew build -x copyNativeLibraries
+try {
+	def result = ['cmake', '--version'].execute()
+	result.waitFor()
+	if (result.exitValue() == 0) {
+		compileJava.dependsOn copyNativeLibraries
+		println "CMake found - native libraries will be built automatically"
+	} else {
+		println "CMake not available - skipping native library build"
+		println "Run './gradlew checkNativeBuildRequirements' for setup instructions"
+	}
+} catch (Exception e) {
+	println "CMake not available - skipping native library build"
+	println "Run './gradlew checkNativeBuildRequirements' for setup instructions"
+}
+clean.dependsOn cleanCubiomes
+
 processResources {
 	inputs.property "version", project.version
+	
+	// Declare explicit dependency on native libraries
+	dependsOn copyNativeLibraries
+	
+	// Include native libraries in the jar
+	from(nativeResourcesDir) {
+		into 'natives'
+	}
+	
+	// Handle duplicate files
+	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
 	filesMatching("fabric.mod.json") {
 		expand "version": inputs.properties.version
@@ -61,6 +315,11 @@ java {
 
 	sourceCompatibility = JavaVersion.VERSION_21
 	targetCompatibility = JavaVersion.VERSION_21
+}
+
+// Ensure sourcesJar waits for native libraries
+tasks.sourcesJar {
+	dependsOn copyNativeLibraries
 }
 
 jar {
