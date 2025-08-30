@@ -1,7 +1,13 @@
 package cubeium.cubeium;
 
+import org.lwjgl.glfw.GLFW;
+
+import cubeium.cubeium.world.test.JNITestRunner;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
 
 public class CubeiumClient implements ClientModInitializer {
@@ -9,14 +15,22 @@ public class CubeiumClient implements ClientModInitializer {
     public void onInitializeClient() {
         Cubeium.LOGGER.info("Initializing Cubeium client...");
 
+        // Register the key binding
+        Cubeium.seedMapKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.cubeium.seedmap",
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_M,
+                "category.cubeium.keybinds"));
+
         // Register key binding tick event
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            if (Cubeium.seedMapKey == null) {
+            KeyBinding seedMapKey = (KeyBinding) Cubeium.seedMapKey;
+            if (seedMapKey == null) {
                 Cubeium.LOGGER.error("Seed map key is null!");
                 return;
             }
 
-            if (Cubeium.seedMapKey.wasPressed()) {
+            if (seedMapKey.wasPressed()) {
                 Cubeium.LOGGER.info("Seed map key pressed!");
                 if (client.player != null) {
                     client.player.sendMessage(Text.literal("Opening seed map..."), false);
@@ -32,6 +46,9 @@ public class CubeiumClient implements ClientModInitializer {
                 }
             }
         });
+
+        // Run comprehensive JNI tests for Task 1.6
+        JNITestRunner.runComprehensiveTests();
 
         Cubeium.LOGGER.info("Client initialization complete!");
     }
