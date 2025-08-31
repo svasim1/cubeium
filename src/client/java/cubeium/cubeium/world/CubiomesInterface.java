@@ -221,23 +221,41 @@ public class CubiomesInterface {
     // Constants (from cubiomes)
     // ========================================
     
-    // Minecraft versions
-    public static final int MC_1_7_2 = 0;
-    public static final int MC_1_8_1 = 1;
-    public static final int MC_1_9_4 = 2;
-    public static final int MC_1_10_2 = 3;
-    public static final int MC_1_11_2 = 4;
-    public static final int MC_1_12_2 = 5;
-    public static final int MC_1_13_2 = 6;
-    public static final int MC_1_14_4 = 7;
-    public static final int MC_1_15_2 = 8;
-    public static final int MC_1_16_1 = 9;
-    public static final int MC_1_16_5 = 10;
-    public static final int MC_1_17_1 = 11;
-    public static final int MC_1_18_2 = 12;
-    public static final int MC_1_19_2 = 13;
-    public static final int MC_1_20_2 = 14;
-    public static final int MC_1_21_4 = 15; // Latest supported version
+    // Minecraft versions - CORRECTED to match cubiomes enum values
+    public static final int MC_UNDEF = 0;
+    public static final int MC_B1_7 = 1;
+    public static final int MC_B1_8 = 2;
+    public static final int MC_1_0_0 = 3;   // MC_1_0
+    public static final int MC_1_1_0 = 4;   // MC_1_1
+    public static final int MC_1_2_5 = 5;   // MC_1_2
+    public static final int MC_1_3_2 = 6;   // MC_1_3
+    public static final int MC_1_4_7 = 7;   // MC_1_4
+    public static final int MC_1_5_2 = 8;   // MC_1_5
+    public static final int MC_1_6_4 = 9;   // MC_1_6
+    public static final int MC_1_7_10 = 10; // MC_1_7
+    public static final int MC_1_8_9 = 11;  // MC_1_8
+    public static final int MC_1_9_4 = 12;  // MC_1_9
+    public static final int MC_1_10_2 = 13; // MC_1_10
+    public static final int MC_1_11_2 = 14; // MC_1_11
+    public static final int MC_1_12_2 = 15; // MC_1_12
+    public static final int MC_1_13_2 = 16; // MC_1_13
+    public static final int MC_1_14_4 = 17; // MC_1_14
+    public static final int MC_1_15_2 = 18; // MC_1_15
+    public static final int MC_1_16_1 = 19;
+    public static final int MC_1_16_5 = 20; // MC_1_16
+    public static final int MC_1_17_1 = 21; // MC_1_17 - CORRECTED!
+    public static final int MC_1_18_2 = 22; // MC_1_18
+    public static final int MC_1_19_2 = 23;
+    public static final int MC_1_19_4 = 24; // MC_1_19
+    public static final int MC_1_20_6 = 25; // MC_1_20 - CORRECTED!
+    public static final int MC_1_21_1 = 26;
+    public static final int MC_1_21_3 = 27;
+    public static final int MC_1_21_WD = 28; // MC_1_21 - CORRECTED!
+    
+    // Convenient aliases
+    public static final int MC_1_17 = MC_1_17_1;
+    public static final int MC_1_20 = MC_1_20_6;
+    public static final int MC_1_21 = MC_1_21_WD;
     
     // Dimensions
     public static final int DIM_OVERWORLD = 0;

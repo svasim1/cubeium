@@ -3,6 +3,7 @@ package cubeium.cubeium;
 import org.lwjgl.glfw.GLFW;
 
 import cubeium.cubeium.world.test.JNITestRunner;
+import cubeium.cubeium.blazemap.BlazeMapSeedScreen;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
@@ -33,16 +34,14 @@ public class CubeiumClient implements ClientModInitializer {
             if (seedMapKey.wasPressed()) {
                 Cubeium.LOGGER.info("Seed map key pressed!");
                 if (client.player != null) {
-                    client.player.sendMessage(Text.literal("Opening seed map..."), false);
-                } else {
-                    Cubeium.LOGGER.warn("Player is null when key was pressed!");
+                    client.player.sendMessage(Text.literal("Opening BlazeMap seed explorer..."), false);
                 }
 
                 try {
-                    client.setScreen(new SeedMapScreen());
-                    Cubeium.LOGGER.info("Screen set successfully");
+                    client.setScreen(new BlazeMapSeedScreen());
+                    Cubeium.LOGGER.info("BlazeMap Screen set successfully");
                 } catch (Exception e) {
-                    Cubeium.LOGGER.error("Failed to set screen: " + e.getMessage());
+                    Cubeium.LOGGER.error("Failed to set BlazeMap screen: " + e.getMessage());
                 }
             }
         });

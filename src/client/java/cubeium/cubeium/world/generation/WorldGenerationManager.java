@@ -18,10 +18,10 @@ public class WorldGenerationManager {
     
     static {
         // Initialize version information
-        VERSION_INFO.put(CubiomesInterface.MC_1_7_2, new VersionInfo("1.7.2", "Legacy", 
+        VERSION_INFO.put(CubiomesInterface.MC_1_7_10, new VersionInfo("1.7.10", "Legacy", 
             Set.of(CubiomesInterface.DESERT_PYRAMID, CubiomesInterface.JUNGLE_TEMPLE, CubiomesInterface.SWAMP_HUT, CubiomesInterface.STRONGHOLD, CubiomesInterface.MINESHAFT)));
         
-        VERSION_INFO.put(CubiomesInterface.MC_1_8_1, new VersionInfo("1.8.1", "Ocean Monuments", 
+        VERSION_INFO.put(CubiomesInterface.MC_1_8_9, new VersionInfo("1.8.9", "Ocean Monuments", 
             Set.of(CubiomesInterface.DESERT_PYRAMID, CubiomesInterface.JUNGLE_TEMPLE, CubiomesInterface.SWAMP_HUT, CubiomesInterface.OCEAN_MONUMENT, CubiomesInterface.STRONGHOLD, CubiomesInterface.MINESHAFT)));
         
         VERSION_INFO.put(CubiomesInterface.MC_1_9_4, new VersionInfo("1.9.4", "End Cities", 
@@ -39,7 +39,7 @@ public class WorldGenerationManager {
         VERSION_INFO.put(CubiomesInterface.MC_1_18_2, new VersionInfo("1.18.2", "Caves & Cliffs Part II", 
             Set.of(CubiomesInterface.DESERT_PYRAMID, CubiomesInterface.JUNGLE_TEMPLE, CubiomesInterface.SWAMP_HUT, CubiomesInterface.OCEAN_MONUMENT, CubiomesInterface.END_CITY, CubiomesInterface.WOODLAND_MANSION, CubiomesInterface.VILLAGE, CubiomesInterface.OUTPOST, CubiomesInterface.NETHER_FORTRESS, CubiomesInterface.BASTION, CubiomesInterface.RUINED_PORTAL, CubiomesInterface.STRONGHOLD, CubiomesInterface.MINESHAFT)));
         
-        VERSION_INFO.put(CubiomesInterface.MC_1_21_4, new VersionInfo("1.21.4", "Current", 
+        VERSION_INFO.put(CubiomesInterface.MC_1_21, new VersionInfo("1.21", "Current", 
             Set.of(CubiomesInterface.DESERT_PYRAMID, CubiomesInterface.IGLOO, CubiomesInterface.JUNGLE_TEMPLE, CubiomesInterface.SWAMP_HUT, CubiomesInterface.OUTPOST, CubiomesInterface.VILLAGE, CubiomesInterface.OCEAN_MONUMENT, CubiomesInterface.WOODLAND_MANSION, CubiomesInterface.STRONGHOLD, CubiomesInterface.MINESHAFT, CubiomesInterface.DUNGEON, CubiomesInterface.END_CITY, CubiomesInterface.END_GATEWAY, CubiomesInterface.NETHER_FORTRESS, CubiomesInterface.BASTION, CubiomesInterface.RUINED_PORTAL)));
     }
     
@@ -67,7 +67,7 @@ public class WorldGenerationManager {
      * Create a WorldGenerationManager for the current version
      */
     public WorldGenerationManager() {
-        this(CubiomesInterface.MC_1_21_4, WorldType.DEFAULT);
+        this(CubiomesInterface.MC_1_21, WorldType.DEFAULT);
     }
     
     /**
@@ -223,7 +223,7 @@ public class WorldGenerationManager {
     public boolean doesLargeBiomesAffectStructures() {
         // Large biomes primarily affects biome generation, not structure placement
         // However, since structures depend on biomes, there can be indirect effects
-        return worldType == WorldType.LARGE_BIOMES && mcVersion >= CubiomesInterface.MC_1_8_1;
+        return worldType == WorldType.LARGE_BIOMES && mcVersion >= CubiomesInterface.MC_1_8_9;
     }
     
     /**
@@ -247,7 +247,7 @@ public class WorldGenerationManager {
      * @return Latest MC version constant
      */
     public static int getLatestVersion() {
-        return CubiomesInterface.MC_1_21_4;
+        return CubiomesInterface.MC_1_21;
     }
     
     /**

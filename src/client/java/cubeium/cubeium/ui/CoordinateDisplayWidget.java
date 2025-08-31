@@ -1,126 +1,331 @@
 package cubeium.cubeium.ui;
 
-import net.minecraft.client.gui.DrawContext;
+import cubeium.cubeium.rendering.MapRenderer;
+import cubeium.cubeium.navigation.CoordinateSystemConverter;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
 
 /**
- * Widget for displaying current coordinates on the map
+ * Widget that displays coordinate information with conversion capabilities.
+ * Supports multiple positioning modes and coordinate system formats.
  */
 public class CoordinateDisplayWidget {
+    
+    // Widget positioning options
+    public enum WidgetPosition {
+        TOP_LEFT("Top Left"),
+        TOP_RIGHT("Top Right"),
+        BOTTOM_LEFT("Bottom Left"),
+        BOTTOM_RIGHT("Bottom Right"),
+        FOLLOW_MOUSE("Follow Mouse"),
+        CENTER_BOTTOM("Center Bottom"),
+        HIDDEN("Hidden");
+        
+        public final String displayName;
+        
+        WidgetPosition(String displayName) {
+            this.displayName = displayName;
+        }
+    }
+    
+    // Widget sizing and appearance
+    private static final int WIDGET_MARGIN = 10;
+    private static final int WIDGET_PADDING = 8;
+    private static final int LINE_SPACING = 2;
+    private static final int MOUSE_OFFSET_X = 15;
+    private static final int MOUSE_OFFSET_Y = -25;
+    
+    // Colors (ARGB format)
+    private static final int BACKGROUND_COLOR = 0xCC000000; // Semi-transparent black
+    private static final int BORDER_COLOR = 0xFF404040; // Dark gray
+    private static final int TEXT_COLOR = 0xFFFFFFFF; // White
+    private static final int ACCENT_COLOR = 0xFF00AAFF; // Blue
+    private static final int HIGHLIGHT_COLOR = 0xFFFFFF00; // Yellow
+    
+    private final MinecraftClient client;
+    private final MapRenderer mapRenderer;
     private final TextRenderer textRenderer;
-    private int x, y;
-    private int width, height;
-    private int currentX = 0;
-    private int currentY = 0;
-    private int currentZ = 0;
-    private String biome = "Unknown";
-    private boolean visible = true;
+    private final CoordinateSystemConverter coordinateConverter;
     
-    private static final int PADDING = 8;
-    private static final int LINE_HEIGHT = 12;
-    private static final int BACKGROUND_COLOR = 0x80000000; // Semi-transparent black
-    private static final int TEXT_COLOR = 0xFFFFFF; // White
-    private static final int BORDER_COLOR = 0xFF666666; // Gray border
+    // Widget state
+    private WidgetPosition position = WidgetPosition.BOTTOM_LEFT;
+    private boolean isExpanded = false;
+    private boolean showGrid = true;
+    private boolean showScale = true;
+    private boolean legacyMode = false;
     
-    public CoordinateDisplayWidget(int x, int y, TextRenderer textRenderer) {
-        this.x = x;
-        this.y = y;
-        this.textRenderer = textRenderer;
-        calculateDimensions();
+    // Tracking coordinates
+    private double lastWorldX = 0;
+    private double lastWorldZ = 0;
+    private int lastMouseX = 0;
+    private int lastMouseY = 0;
+    
+    public CoordinateDisplayWidget(MinecraftClient client, MapRenderer mapRenderer) {
+        this.client = client;
+        this.mapRenderer = mapRenderer;
+        this.textRenderer = client.textRenderer;
+        this.coordinateConverter = new CoordinateSystemConverter(mapRenderer);
     }
     
-    private void calculateDimensions() {
-        // Calculate width based on longest possible coordinate string
-        String longestText = "Biome: Very Long Biome Name Here";
-        int maxTextWidth = Math.max(
-            textRenderer.getWidth("X: -2147483648"),
-            Math.max(
-                textRenderer.getWidth("Y: -2147483648"), 
-                Math.max(
-                    textRenderer.getWidth("Z: -2147483648"),
-                    textRenderer.getWidth(longestText)
-                )
-            )
-        );
-        
-        this.width = maxTextWidth + (PADDING * 2);
-        this.height = (LINE_HEIGHT * 4) + (PADDING * 2); // 4 lines of text
+    /**
+     * Set the widget position
+     */
+    public void setPosition(WidgetPosition position) {
+        this.position = position;
     }
     
-    public void updateCoordinates(int x, int y, int z) {
-        this.currentX = x;
-        this.currentY = y;
-        this.currentZ = z;
+    /**
+     * Get current widget position
+     */
+    public WidgetPosition getPosition() {
+        return position;
     }
     
-    public void updateBiome(String biome) {
-        this.biome = biome != null ? biome : "Unknown";
+    /**
+     * Toggle expanded view
+     */
+    public void toggleExpanded() {
+        this.isExpanded = !this.isExpanded;
     }
     
+    /**
+     * Set expanded state
+     */
+    public void setExpanded(boolean expanded) {
+        this.isExpanded = expanded;
+    }
+    
+    /**
+     * Toggle grid display
+     */
+    public void toggleGridDisplay() {
+        this.showGrid = !this.showGrid;
+    }
+    
+    /**
+     * Toggle scale display
+     */
+    public void toggleScaleDisplay() {
+        this.showScale = !this.showScale;
+    }
+    
+    /**
+     * Enable legacy coordinate mode
+     */
+    public void setLegacyMode(boolean legacyMode) {
+        this.legacyMode = legacyMode;
+    }
+    
+    /**
+     * Update coordinate tracking
+     */
+    public void update(double worldX, double worldZ, int mouseX, int mouseY) {
+        this.lastWorldX = worldX;
+        this.lastWorldZ = worldZ;
+        this.lastMouseX = mouseX;
+        this.lastMouseY = mouseY;
+    }
+    
+    /**
+     * Handle keyboard input
+     */
+    public boolean handleKeyPress(int keyCode, int scanCode, int modifiers) {
+        // Handle coordinate widget shortcuts here if needed
+        return false;
+    }
+    
+    /**
+     * Render the coordinate widget
+     */
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        if (!visible) return;
+        if (position == WidgetPosition.HIDDEN) {
+            return;
+        }
         
-        // Draw background
-        context.fill(x, y, x + width, y + height, BACKGROUND_COLOR);
+        // Get coordinate information
+        CoordinateSystemConverter.CoordinateInfo coordInfo = 
+            coordinateConverter.convertCoordinates(lastWorldX, lastWorldZ);
         
-        // Draw border
-        context.drawBorder(x, y, width, height, BORDER_COLOR);
+        // Prepare text lines
+        String[] lines = prepareTextLines(coordInfo);
+        if (lines.length == 0) {
+            return;
+        }
         
-        // Draw coordinate text
-        int textY = y + PADDING;
-        context.drawText(textRenderer, 
-            Text.literal("X: " + currentX), 
-            x + PADDING, textY, TEXT_COLOR, false);
+        // Calculate widget dimensions
+        int maxTextWidth = 0;
+        for (String line : lines) {
+            maxTextWidth = Math.max(maxTextWidth, textRenderer.getWidth(line));
+        }
         
-        textY += LINE_HEIGHT;
-        context.drawText(textRenderer, 
-            Text.literal("Y: " + currentY), 
-            x + PADDING, textY, TEXT_COLOR, false);
+        int widgetWidth = maxTextWidth + WIDGET_PADDING * 2;
+        int widgetHeight = (lines.length * (textRenderer.fontHeight + LINE_SPACING)) 
+                          - LINE_SPACING + WIDGET_PADDING * 2;
         
-        textY += LINE_HEIGHT;
-        context.drawText(textRenderer, 
-            Text.literal("Z: " + currentZ), 
-            x + PADDING, textY, TEXT_COLOR, false);
+        // Calculate widget position
+        int[] widgetPos = calculateWidgetPosition(widgetWidth, widgetHeight, mouseX, mouseY);
+        int widgetX = widgetPos[0];
+        int widgetY = widgetPos[1];
         
-        textY += LINE_HEIGHT;
-        String biomeText = biome.length() > 20 ? biome.substring(0, 17) + "..." : biome;
-        context.drawText(textRenderer, 
-            Text.literal("Biome: " + biomeText), 
-            x + PADDING, textY, TEXT_COLOR, false);
+        // Render widget background
+        context.fill(widgetX, widgetY, widgetX + widgetWidth, widgetY + widgetHeight, BACKGROUND_COLOR);
+        context.drawBorder(widgetX, widgetY, widgetWidth, widgetHeight, BORDER_COLOR);
+        
+        // Render text lines
+        int textY = widgetY + WIDGET_PADDING;
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            int textColor = getLineColor(i, lines.length);
+            context.drawText(textRenderer, line, widgetX + WIDGET_PADDING, textY, textColor, false);
+            textY += textRenderer.fontHeight + LINE_SPACING;
+        }
     }
     
-    public void setPosition(int x, int y) {
-        this.x = x;
-        this.y = y;
+    /**
+     * Prepare text lines for display
+     */
+    private String[] prepareTextLines(CoordinateSystemConverter.CoordinateInfo coordInfo) {
+        if (legacyMode) {
+            return prepareLegacyLines(coordInfo);
+        }
+        
+        if (isExpanded) {
+            return prepareExpandedLines(coordInfo);
+        } else {
+            return prepareCompactLines(coordInfo);
+        }
     }
     
-    public void setVisible(boolean visible) {
-        this.visible = visible;
+    /**
+     * Prepare legacy format lines
+     */
+    private String[] prepareLegacyLines(CoordinateSystemConverter.CoordinateInfo coordInfo) {
+        return new String[] {
+            String.format("X: %.1f, Z: %.1f", lastWorldX, lastWorldZ),
+            String.format("Chunk: [%d, %d]", (int)Math.floor(lastWorldX / 16), (int)Math.floor(lastWorldZ / 16))
+        };
     }
     
-    public boolean isVisible() {
-        return visible;
+    /**
+     * Prepare compact format lines
+     */
+    private String[] prepareCompactLines(CoordinateSystemConverter.CoordinateInfo coordInfo) {
+        String primary = coordinateConverter.formatCoordinates(coordInfo);
+        String secondary = String.format("World: %.1f, %.1f", coordInfo.worldX, coordInfo.worldZ);
+        return new String[] { primary, secondary };
     }
     
-    public boolean isMouseOver(double mouseX, double mouseY) {
-        return mouseX >= x && mouseX < x + width && 
-               mouseY >= y && mouseY < y + height;
+    /**
+     * Prepare expanded format lines
+     */
+    private String[] prepareExpandedLines(CoordinateSystemConverter.CoordinateInfo coordInfo) {
+        String[] lines = new String[4 + (showGrid ? 1 : 0) + (showScale ? 1 : 0)];
+        int lineIndex = 0;
+        
+        lines[lineIndex++] = "§l§9Coordinates";
+        lines[lineIndex++] = "§f" + coordinateConverter.formatCoordinates(coordInfo);
+        lines[lineIndex++] = "§7World: " + String.format("%.1f, %.1f", coordInfo.worldX, coordInfo.worldZ);
+        lines[lineIndex++] = "§7" + coordInfo.scaleName + ": " + String.format("%.1f, %.1f", coordInfo.convertedX, coordInfo.convertedZ);
+        
+        if (showGrid) {
+            CoordinateSystemConverter.GridInfo gridInfo = coordinateConverter.getAppropriateGrid();
+            lines[lineIndex++] = "§6Grid: " + gridInfo.toString();
+        }
+        
+        if (showScale) {
+            lines[lineIndex++] = "§8Scale: " + coordinateConverter.getCurrentScale().displayName;
+        }
+        
+        return lines;
     }
     
-    public int getX() {
-        return x;
+    /**
+     * Calculate widget position based on positioning mode
+     */
+    private int[] calculateWidgetPosition(int widgetWidth, int widgetHeight, int mouseX, int mouseY) {
+        int screenWidth = client.getWindow().getScaledWidth();
+        int screenHeight = client.getWindow().getScaledHeight();
+        
+        switch (position) {
+            case TOP_LEFT:
+                return new int[] { WIDGET_MARGIN, WIDGET_MARGIN };
+                
+            case TOP_RIGHT:
+                return new int[] { screenWidth - widgetWidth - WIDGET_MARGIN, WIDGET_MARGIN };
+                
+            case BOTTOM_LEFT:
+                return new int[] { WIDGET_MARGIN, screenHeight - widgetHeight - WIDGET_MARGIN };
+                
+            case BOTTOM_RIGHT:
+                return new int[] { screenWidth - widgetWidth - WIDGET_MARGIN, 
+                                  screenHeight - widgetHeight - WIDGET_MARGIN };
+                
+            case CENTER_BOTTOM:
+                return new int[] { (screenWidth - widgetWidth) / 2, 
+                                  screenHeight - widgetHeight - WIDGET_MARGIN };
+                
+            case FOLLOW_MOUSE:
+                int mouseWidgetX = mouseX + MOUSE_OFFSET_X;
+                int mouseWidgetY = mouseY + MOUSE_OFFSET_Y;
+                
+                // Keep widget on screen
+                mouseWidgetX = Math.max(0, Math.min(mouseWidgetX, screenWidth - widgetWidth));
+                mouseWidgetY = Math.max(0, Math.min(mouseWidgetY, screenHeight - widgetHeight));
+                
+                return new int[] { mouseWidgetX, mouseWidgetY };
+                
+            default:
+                return new int[] { WIDGET_MARGIN, WIDGET_MARGIN };
+        }
     }
     
-    public int getY() {
-        return y;
+    /**
+     * Get color for text line based on index
+     */
+    private int getLineColor(int lineIndex, int totalLines) {
+        if (lineIndex == 0) {
+            return ACCENT_COLOR; // Header line
+        } else if (lineIndex == totalLines - 1 && showScale) {
+            return 0xFF888888; // Scale info line
+        } else {
+            return TEXT_COLOR; // Regular text
+        }
     }
     
-    public int getWidth() {
-        return width;
+    /**
+     * Check if mouse is over widget (for interaction)
+     */
+    public boolean isMouseOver(int mouseX, int mouseY) {
+        if (position == WidgetPosition.HIDDEN || position == WidgetPosition.FOLLOW_MOUSE) {
+            return false;
+        }
+        
+        // This is a simplified check - would need actual widget bounds
+        return false;
     }
     
-    public int getHeight() {
-        return height;
+    /**
+     * Handle mouse click on widget
+     */
+    public boolean handleMouseClick(int mouseX, int mouseY, int button) {
+        if (!isMouseOver(mouseX, mouseY)) {
+            return false;
+        }
+        
+        if (button == 0) { // Left click - toggle expanded
+            toggleExpanded();
+            return true;
+        } else if (button == 1) { // Right click - cycle position
+            WidgetPosition[] positions = WidgetPosition.values();
+            int currentIndex = position.ordinal();
+            int nextIndex = (currentIndex + 1) % positions.length;
+            setPosition(positions[nextIndex]);
+            return true;
+        }
+        
+        return false;
     }
 }
