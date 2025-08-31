@@ -9,7 +9,6 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
-import net.minecraft.text.Text;
 
 public class CubeiumClient implements ClientModInitializer {
     @Override
@@ -31,11 +30,9 @@ public class CubeiumClient implements ClientModInitializer {
                 return;
             }
 
-            if (seedMapKey.wasPressed()) {
+                if (seedMapKey.wasPressed()) {
                 Cubeium.LOGGER.info("Seed map key pressed!");
-                if (client.player != null) {
-                    client.player.sendMessage(Text.literal("Opening BlazeMap seed explorer..."), false);
-                }
+                // Quiet mode: do not send a chat message when opening the BlazeMap screen
 
                 try {
                     client.setScreen(new BlazeMapSeedScreen());

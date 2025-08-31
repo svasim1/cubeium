@@ -30,9 +30,7 @@ public class SeedMapRenderer {
         
         renderCallCount++;
         if (renderCallCount <= 3 || renderCallCount % 60 == 0) {
-            System.out.println("[SeedMapRenderer] Render call #" + renderCallCount + " - seed=" + seed + 
-                             ", center=(" + centerX + "," + centerZ + "), scale=" + scale + 
-                             ", screen=" + screenWidth + "x" + screenHeight);
+                        // render call debug log removed
         }
         
         // Generate biome data
@@ -46,8 +44,7 @@ public class SeedMapRenderer {
         
         // Debug output
         if (biomeData == null) {
-            System.out.println("[SeedMapRenderer] No biome data available for seed " + seed + 
-                             " at (" + startX + ", " + startZ + ") size " + blocksWidth + "x" + blocksHeight);
+                        // no biome data debug log removed
         } else {
             // Show first few biomes and their colors to debug what we're getting
             StringBuilder biomePreview = new StringBuilder();
@@ -60,8 +57,7 @@ public class SeedMapRenderer {
                     biomePreview.append(biomeId).append("(#").append(String.format("%06X", color & 0xFFFFFF)).append(") ");
                 }
             }
-            System.out.println("[SeedMapRenderer] Got " + biomeData.length + " biomes, " + uniqueBiomes.size() + " unique types: [" + biomePreview.toString().trim() + "...]");
-            System.out.println("[SeedMapRenderer] All unique biome IDs: " + uniqueBiomes);
+                        // biome data debug logs removed
         }
         
         if (biomeData != null) {
@@ -120,12 +116,7 @@ public class SeedMapRenderer {
         }
         
         // Debug: show what colors we're actually rendering
-        System.out.println("[SeedMapRenderer] Rendered " + colorCounts.size() + " different colors: " + 
-            colorCounts.entrySet().stream()
-                .map(e -> String.format("#%06X(%d)", e.getKey() & 0xFFFFFF, e.getValue()))
-                .limit(5)
-                .reduce((a, b) -> a + ", " + b)
-                .orElse("none"));
+                            // colorCounts debug log removed
     }
     
     /**

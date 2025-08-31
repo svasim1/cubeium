@@ -11,14 +11,6 @@ import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.text.Text;
 import net.minecraft.client.render.Tessellator;
-import net.minecraft.client.render.BufferBuilder;
-import net.minecraft.client.render.VertexFormat;
-import net.minecraft.client.render.VertexFormats;
-import net.minecraft.client.render.BufferRenderer;
-import net.minecraft.client.render.GameRenderer;
-import org.joml.Matrix4f;
-import java.util.Map;
-import java.util.HashMap;
 
 /**
  * Complete BlazeMap-style seed map screen.
@@ -43,7 +35,6 @@ public class BlazeMapSeedScreen extends Screen {
     // UI components
     private SeedInputWidget seedInput;
     private ButtonWidget generateButton;
-    private ButtonWidget randomSeedButton;
     private ButtonWidget resetViewButton;
     
     // Mouse state
@@ -55,30 +46,30 @@ public class BlazeMapSeedScreen extends Screen {
     private int mapX, mapY, mapWidth, mapHeight;
     
     public BlazeMapSeedScreen() {
-        super(Text.literal("BlazeMap Seed Explorer"));
+        super(Text.empty());
         
         try {
-            System.out.println("[BlazeMapSeedScreen] Initializing components...");
+            // initialization log removed
             biomeGenerator = new BiomeGenerator();
-            System.out.println("[BlazeMapSeedScreen] BiomeGenerator initialized successfully");
+            // init log removed
             
             mapCache = new MapCache(biomeGenerator);
-            System.out.println("[BlazeMapSeedScreen] MapCache initialized successfully");
+            // init log removed
             
             tileRenderer = new MapTileRenderer(mapCache);
-            System.out.println("[BlazeMapSeedScreen] MapTileRenderer initialized successfully");
+            // init log removed
             
             mouseSmoother = new MouseSubpixelSmoother();
-            System.out.println("[BlazeMapSeedScreen] MouseSubpixelSmoother initialized successfully");
+            // init log removed
             
             // DO NOT initialize with any seed - wait for user input only
             currentSeed = 0L; // No default seed
             hasValidSeed = false;
             
             updateScale();
-            System.out.println("[BlazeMapSeedScreen] Initialized without default seed - user must enter seed manually");
+            // init log removed
         } catch (Exception e) {
-            System.err.println("[BlazeMapSeedScreen] Failed to initialize components: " + e.getMessage());
+            // initialization error log removed
             e.printStackTrace();
             throw new RuntimeException("BlazeMapSeedScreen initialization failed", e);
         }
@@ -109,11 +100,7 @@ public class BlazeMapSeedScreen extends Screen {
                 .build();
         addDrawableChild(generateButton);
         
-        // Random seed button
-        randomSeedButton = ButtonWidget.builder(Text.literal("Random"), button -> generateRandomSeed())
-                .dimensions(width / 2 - 75, 45, 70, 20)
-                .build();
-        addDrawableChild(randomSeedButton);
+    // Random seed button removed per request
         
         // Reset view button
         resetViewButton = ButtonWidget.builder(Text.literal("Reset View"), button -> resetView())
@@ -129,11 +116,11 @@ public class BlazeMapSeedScreen extends Screen {
             generateButton.active = hasValidSeed;
         }
         
-        System.out.println("[BlazeMapSeedScreen] UI initialized - user must manually click Generate button");
+    // UI init log removed
     }
     
     private void onSeedChanged(long seed, boolean isValid) {
-        System.out.println("[BlazeMapSeedScreen] Seed changed: " + seed + ", valid: " + isValid);
+    // seed change log removed
         this.currentSeed = seed;
         this.hasValidSeed = isValid;
         // IMPORTANT: Do NOT set mapGenerated = true here - only when user clicks Generate
@@ -155,19 +142,19 @@ public class BlazeMapSeedScreen extends Screen {
                     if (seedInput != null) {
                         seedInput.setText(String.valueOf(worldSeed));
                     }
-                    System.out.println("[BlazeMapSeedScreen] Using current world seed: " + worldSeed);
+                    // world seed log removed
                     return;
                 }
             }
         } catch (Exception e) {
-            System.out.println("[BlazeMapSeedScreen] Failed to get world seed: " + e.getMessage());
+            // world seed error log removed
         }
         
         // Fallback: don't set any seed - wait for user input
         if (seedInput != null) {
             seedInput.setText("");
         }
-        System.out.println("[BlazeMapSeedScreen] No world seed available - waiting for user input");
+    // no world seed log removed
     }
     
     @Override
@@ -185,67 +172,14 @@ public class BlazeMapSeedScreen extends Screen {
         super.render(context, mouseX, mouseY, delta);
         
         // RENDER TEST SQUARES LAST - AFTER EVERYTHING ELSE
-        renderTestSquares(context);
+
     }
     
-    /**
-     * DEBUG: Render test squares AFTER everything else but in MAP COORDINATES
-     */
-    private void renderTestSquares(DrawContext context) {
-        System.out.println("=== TEST SQUARES IN MAP COORDINATE SYSTEM ===");
-        System.out.println("[MAP COORDS] Map area: " + mapX + "," + mapY + " size:" + mapWidth + "x" + mapHeight);
-        System.out.println("[MAP COORDS] Map center: " + mapCenterX + "," + mapCenterZ + " zoom:" + zoomLevel);
-        
-        // Calculate test positions WITHIN the map area that move with panning
-        // These should be at specific world coordinates that translate to screen positions
-        
-        // Test square 1: At world origin (0,0) 
-        int worldX1 = 0;
-        int worldZ1 = 0;
-        int screenX1 = mapX + mapWidth/2 + (worldX1 - mapCenterX) / zoomLevel;
-        int screenY1 = mapY + mapHeight/2 + (worldZ1 - mapCenterZ) / zoomLevel;
-        
-        // Test square 2: At offset world position
-        int worldX2 = 100;
-        int worldZ2 = 100;
-        int screenX2 = mapX + mapWidth/2 + (worldX2 - mapCenterX) / zoomLevel;
-        int screenY2 = mapY + mapHeight/2 + (worldZ2 - mapCenterZ) / zoomLevel;
-        
-        // Test square 3: At current map center
-        int screenX3 = mapX + mapWidth/2;  // Always at map center
-        int screenY3 = mapY + mapHeight/2;
-        
-        System.out.println("[MAP COORDS] World(0,0) -> Screen(" + screenX1 + "," + screenY1 + ")");
-        System.out.println("[MAP COORDS] World(100,100) -> Screen(" + screenX2 + "," + screenY2 + ")");
-        System.out.println("[MAP COORDS] Map center -> Screen(" + screenX3 + "," + screenY3 + ")");
-        
-        // Only draw squares if they're within the visible map area
-        if (screenX1 >= mapX && screenX1 < mapX + mapWidth - 20 && 
-            screenY1 >= mapY && screenY1 < mapY + mapHeight - 20) {
-            context.fill(screenX1, screenY1, screenX1 + 20, screenY1 + 20, 0xFFFF0000); // RED at world origin
-            System.out.println("[MAP COORDS] RED square drawn at world origin");
-        }
-        
-        if (screenX2 >= mapX && screenX2 < mapX + mapWidth - 20 && 
-            screenY2 >= mapY && screenY2 < mapY + mapHeight - 20) {
-            context.fill(screenX2, screenY2, screenX2 + 20, screenY2 + 20, 0xFF00FF00); // GREEN at world (100,100)
-            System.out.println("[MAP COORDS] GREEN square drawn at world (100,100)");
-        }
-        
-        // Map center square should always be visible
-        context.fill(screenX3 - 10, screenY3 - 10, screenX3 + 10, screenY3 + 10, 0xFF0000FF); // BLUE at map center
-        System.out.println("[MAP COORDS] BLUE square drawn at map center");
-        
-        // Add coordinate reference square at map corner
-        context.fill(mapX + 5, mapY + 5, mapX + 15, mapY + 15, 0xFFFFFF00); // YELLOW at map corner
-        System.out.println("[MAP COORDS] YELLOW reference square at map corner");
-        
-        System.out.println("[MAP COORDS] Test squares should now move with map panning!");
-    }
+    // ... debug test squares removed
     
     @Override
     public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) {
-        System.out.println("[RENDER DEBUG] renderBackground() - ALL OVERLAYS DISABLED FOR TESTING");
+    // render debug logs removed
         
         // TEMPORARILY DISABLE ALL BACKGROUND LAYERS TO FIND TEST SQUARES
         // Dark gray background - DISABLED
@@ -254,7 +188,7 @@ public class BlazeMapSeedScreen extends Screen {
         // Map area border - DISABLED  
         // context.fill(mapX - 2, mapY - 2, mapX + mapWidth + 2, mapY + mapHeight + 2, 0xFF2A2A2A);
         
-        System.out.println("[RENDER DEBUG] ALL background fills disabled - screen should be transparent");
+    // render debug logs removed
     }
     
     /**
@@ -275,7 +209,7 @@ public class BlazeMapSeedScreen extends Screen {
             context.drawText(textRenderer, message, 
                 mapX + (mapWidth - messageWidth) / 2,
                 mapY + mapHeight / 2, 0xFFAAAAAA, false);
-            System.out.println("[RENDER DEBUG] Map not generated - placeholder fill DISABLED");
+            // render debug log removed
             return;
         }
         
@@ -290,30 +224,17 @@ public class BlazeMapSeedScreen extends Screen {
             context.drawText(textRenderer, message, 
                 mapX + (mapWidth - messageWidth) / 2,
                 mapY + mapHeight / 2, 0xFFFFFFFF, false);
-            System.out.println("[RENDER DEBUG] Loading screen - placeholder fill DISABLED");
+            // render debug log removed
             return;
         }
         
         // TEMPORARY DEBUG: Bypass tile renderer and render directly from biome data
-        System.out.println("[BlazeMapSeedScreen] DEBUG: Bypassing tile renderer, rendering directly");
+            // debug bypass log removed
         renderDirectBiomeMap(context, currentSeed, 
                             mapX + 1, mapY + 1, mapWidth - 2, mapHeight - 2,
                             mapCenterX, mapCenterZ, zoomLevel);
         
-        // Show progress if still generating
-        if (progress < 1.0f) {
-            // Show loading progress overlay
-            String message = String.format("Loading map... %.0f%%", progress * 100);
-            int messageWidth = textRenderer.getWidth(message);
-            
-            // Semi-transparent background
-            context.fill(mapX + 10, mapY + 10, 
-                        mapX + messageWidth + 20, mapY + 35, 
-                        0x80000000);
-            
-            context.drawText(textRenderer, message, 
-                mapX + 15, mapY + 15, 0xFFFFFFFF, true);
-        }
+    // Loading progress overlay removed per UI cleanup
         
         // Show cache statistics
         if (mapCache.hasCachedData(currentSeed)) {
@@ -329,18 +250,9 @@ public class BlazeMapSeedScreen extends Screen {
      * Render UI overlays (BlazeMap-style)
      */
     private void renderUI(DrawContext context, int mouseX, int mouseY) {
-        // Title with BlazeMap styling
-        String title = "BlazeMap Seed Explorer";
-        int titleWidth = textRenderer.getWidth(title);
-        context.drawText(textRenderer, title, (width - titleWidth) / 2, 5, 0xFF4A9EFF, true);
+    // Title removed per UI cleanup
         
-        // Current seed display
-        String seedDisplay = "Current Seed: " + currentSeed;
-        context.drawText(textRenderer, seedDisplay, 10, height - 35, 0xFFCCCCCC, false);
-        
-        // Zoom level display (Fixed to show blocks per pixel like SeedMapScreen)
-        String zoomDisplay = String.format("Zoom: %d blocks/pixel", zoomLevel);
-        context.drawText(textRenderer, zoomDisplay, 10, height - 20, 0xFFCCCCCC, false);
+    // Current seed and zoom displays removed per UI cleanup
         
         // Mouse coordinates (BlazeMap precision)
         if (showCoordinates && isMouseOverMap(mouseX, mouseY)) {
@@ -431,7 +343,7 @@ public class BlazeMapSeedScreen extends Screen {
      */
     private void generateMap() {
         if (mapCache == null) {
-            System.err.println("[BlazeMapSeedScreen] MapCache is null, cannot generate map");
+            // map cache null log removed
             return;
         }
         
@@ -467,13 +379,13 @@ public class BlazeMapSeedScreen extends Screen {
             tileRenderer.clearCache();
         }
         
-        System.out.println("[BlazeMapSeedScreen] Starting progressive map generation for seed: " + seedToUse);
+    // map generation started log removed
         
         // Start progressive generation - this returns immediately and loads in background
         mapCache.generateMapAsync(seedToUse).thenRun(() -> {
-            System.out.println("[BlazeMapSeedScreen] Map generation completed for seed: " + seedToUse);
+            // map generation completed log removed
         }).exceptionally(throwable -> {
-            System.err.println("[BlazeMapSeedScreen] Map generation failed: " + throwable.getMessage());
+            // map generation failed log removed
             return null;
         });
         
@@ -483,15 +395,7 @@ public class BlazeMapSeedScreen extends Screen {
     /**
      * Generate random seed using working approach
      */
-    private void generateRandomSeed() {
-        long randomSeed = (long)(Math.random() * Long.MAX_VALUE);
-        System.out.println("[BlazeMapSeedScreen] Generated random seed: " + randomSeed);
-        seedInput.setText(String.valueOf(randomSeed));
-        // Force update the current seed
-        this.currentSeed = randomSeed;
-        // Generate map with the new seed
-        generateMap();
-    }
+    // random seed functionality removed from BlazeMap UI
     
     /**
      * Reset view to origin
@@ -608,10 +512,10 @@ public class BlazeMapSeedScreen extends Screen {
     
     @Override
     public void close() {
-        System.out.println("[BlazeMapSeedScreen] Closing BlazeMap Seed Screen");
+    // closing log removed
         // Clean up resources when closing the screen
         if (mapCache != null) {
-            System.out.println("[BlazeMapSeedScreen] Shutting down map cache on screen close");
+            // shutdown log removed
             mapCache.shutdown();
         }
         super.close();
@@ -623,10 +527,7 @@ public class BlazeMapSeedScreen extends Screen {
     private void renderDirectBiomeMap(DrawContext context, long seed, 
                                      int startX, int startY, int width, int height,
                                      int centerX, int centerZ, int blocksPerPixel) {
-        System.out.println("=== ACTUAL BIOME MAP RENDERING ===");
-        System.out.println("[BIOME RENDER] Map area: " + mapX + "," + mapY + " size:" + mapWidth + "x" + mapHeight);
-        System.out.println("[BIOME RENDER] Map center: " + mapCenterX + "," + mapCenterZ + " zoom:" + zoomLevel);
-        System.out.println("[BIOME RENDER] Rendering real biomes using cached data");
+    // biome render debug logs removed
         
         // Get biome data for the visible map area using the same coordinate system
         int mapPixelWidth = mapWidth - 2; // Subtract border
@@ -638,8 +539,7 @@ public class BlazeMapSeedScreen extends Screen {
                                                    mapPixelWidth, mapPixelHeight, zoomLevel);
             
             if (biomeData != null && biomeData.length > 0) {
-                System.out.println("[BIOME RENDER] Got biome data array of size: " + biomeData.length);
-                System.out.println("[BIOME RENDER] Expected size: " + (mapPixelWidth * mapPixelHeight));
+                // biome data debug logs removed
                 
                 // Render each pixel using the biome data
                 for (int pixelY = 0; pixelY < mapPixelHeight && pixelY < biomeData.length / mapPixelWidth; pixelY++) {
@@ -656,58 +556,29 @@ public class BlazeMapSeedScreen extends Screen {
                     }
                 }
                 
-                System.out.println("[BIOME RENDER] Finished rendering real biome map!");
+                // biome render finished log removed
                 
                 // Sample a few biomes for debugging
                 if (biomeData.length > 0) {
-                    int centerIndex = (mapPixelHeight/2) * mapPixelWidth + (mapPixelWidth/2);
-                    if (centerIndex < biomeData.length) {
-                        int centerBiome = biomeData[centerIndex];
-                        System.out.println("[BIOME RENDER] Center biome ID: " + centerBiome + " color: " + Integer.toHexString(getBiomeColor(centerBiome)));
-                    }
+                    // center biome sample removed
                 }
                 
             } else {
-                System.err.println("[BIOME RENDER] No biome data available - falling back to loading squares");
-                
-                // Fallback: Show colorful loading squares while biome data is generating
-                int squareSize = 20;
-                int colors[] = {0xFF0066CC, 0xFF66FF66, 0xFFFFCC00, 0xFF00AA00, 0xFF00FFFF, 0xFFFF00FF};
-                
-                for (int i = 0; i < 6; i++) {
-                    int x = mapX + 10 + (i % 3) * (squareSize + 5);
-                    int y = mapY + 10 + (i / 3) * (squareSize + 5);
-                    context.fill(x, y, x + squareSize, y + squareSize, colors[i]);
-                }
-                
-                System.out.println("[BIOME RENDER] Rendered loading squares - waiting for biome data");
+                // no biome data placeholder log removed
+                // Neutral loading placeholder while biome data is generating
+                context.fill(mapX + 10, mapY + 10, mapX + Math.min(mapX + 200, mapX + mapWidth - 10), mapY + 40, 0xFF2A2A2A);
+                context.drawText(textRenderer, "Loading biome data...", mapX + 15, mapY + 16, 0xFFCCCCCC, false);
             }
             
         } catch (Exception e) {
-            System.err.println("[BIOME RENDER] Error getting biome data: " + e.getMessage());
-            e.printStackTrace();
+            // biome data error logging removed
             
             // Error fallback - red error square
             context.fill(mapX + 10, mapY + 10, mapX + 50, mapY + 50, 0xFFFF0000);
         }
     }
     
-    /**
-     * Helper method to draw a quad with BufferBuilder
-     */
-    private void drawQuad(BufferBuilder buffer, Matrix4f matrix, int x, int y, int width, int height, int color) {
-        float x1 = x;
-        float y1 = y; 
-        float x2 = x + width;
-        float y2 = y + height;
-        float z = 5.0f; // Z depth for HUD
-        
-        // Draw quad as 4 vertices in correct order (counter-clockwise to avoid culling)
-        buffer.vertex(matrix, x1, y1, z).color(color);
-        buffer.vertex(matrix, x1, y2, z).color(color); 
-        buffer.vertex(matrix, x2, y2, z).color(color);
-        buffer.vertex(matrix, x2, y1, z).color(color);
-    }
+    // drawQuad removed (not used)
     
     /**
      * ENHANCED DEBUG METHOD: Biome to color mapping with brighter colors
