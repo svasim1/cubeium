@@ -201,31 +201,38 @@ public class TileRenderer {
         int imageWidth = (int) (request.worldWidth / request.scale);
         int imageHeight = (int) (request.worldHeight / request.scale);
         
-        // Create biome image data
-        BufferedImage biomeImage = new BufferedImage(imageWidth, imageHeight, BufferedImage.TYPE_INT_RGB);
-        
-        for (int y = 0; y < imageHeight; y++) {
-            for (int x = 0; x < imageWidth; x++) {
-                // Calculate world coordinates
-                double worldX = request.worldX + x * request.scale;
-                double worldZ = request.worldZ + y * request.scale;
-                
-                // Get biome at this position
-                int biomeId = biomeRegion.getBiome((int) ((worldX - biomeRegion.x * biomeRegion.scale) / biomeRegion.scale), 
-                                                  (int) ((worldZ - biomeRegion.z * biomeRegion.scale) / biomeRegion.scale));
+        // LOD: When zoomed out, render at a lower resolution and scale up to save CPU.
+        int lodFactor = 1;
+        if (request.scale >= 8.0) lodFactor = 8;
+        else if (request.scale >= 4.0) lodFactor = 4;
+        else if (request.scale >= 2.0) lodFactor = 2;
+
+        int smallW = Math.max(1, imageWidth / lodFactor);
+        int smallH = Math.max(1, imageHeight / lodFactor);
+
+        BufferedImage biomeImage = new BufferedImage(smallW, smallH, BufferedImage.TYPE_INT_RGB);
+
+        // For each low-res pixel, sample the world position at the center of the corresponding block
+        for (int y = 0; y < smallH; y++) {
+            for (int x = 0; x < smallW; x++) {
+                double worldX = request.worldX + (x + 0.5) * request.scale * lodFactor;
+                double worldZ = request.worldZ + (y + 0.5) * request.scale * lodFactor;
+
+                int localX = (int) ((worldX - biomeRegion.x * biomeRegion.scale) / biomeRegion.scale);
+                int localZ = (int) ((worldZ - biomeRegion.z * biomeRegion.scale) / biomeRegion.scale);
+                int biomeId = biomeRegion.getBiome(localX, localZ);
                 Color biomeColor = colorPalette.getBiomeColor(biomeId);
-                
-                // Apply blending if enabled
+
                 if (enableBiomeBlending && request.scale > 0.5) {
                     biomeColor = getBlendedBiomeColor(biomeRegion, worldX, worldZ, biomeColor);
                 }
-                
+
                 biomeImage.setRGB(x, y, biomeColor.getRGB());
             }
         }
-        
-        // Draw the biome image
-        g2d.drawImage(biomeImage, 0, 0, null);
+
+        // Scale the small image up to the tile image size - fast and preserves approximate look
+        g2d.drawImage(biomeImage, 0, 0, imageWidth, imageHeight, null);
     }
     
     /**

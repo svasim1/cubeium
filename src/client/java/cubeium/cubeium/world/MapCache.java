@@ -4,6 +4,10 @@ import cubeium.cubeium.world.generation.BiomeGenerator;
 import java.util.concurrent.*;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.PriorityBlockingQueue;
+import java.util.List;
+import java.util.ArrayList;
 
 /**
  * Advanced map caching system with progressive circular loading
@@ -20,8 +24,19 @@ public class MapCache {
     private volatile boolean isGenerating = false;
     
     // Threading
-    private final ExecutorService generationExecutor = Executors.newFixedThreadPool(2);
+    // Use more aggressive parallelism by default (leave one core free)
+    private final ExecutorService generationExecutor = Executors.newFixedThreadPool(Math.max(2, Runtime.getRuntime().availableProcessors() - 1));
     private BiomeGenerator biomeGenerator;
+    
+    // Prioritized task queue for chunk generation and worker threads
+    private final PriorityBlockingQueue<ChunkTask> taskQueue = new PriorityBlockingQueue<>();
+    private final List<Thread> workers = new ArrayList<>();
+    private final AtomicBoolean workersRunning = new AtomicBoolean(false);
+    private final int workerCount = Math.max(2, Runtime.getRuntime().availableProcessors() - 1);
+    
+    // Current viewport center in chunk coordinates (used for prioritization)
+    private volatile int viewportCenterChunkX = 0;
+    private volatile int viewportCenterChunkZ = 0;
     
     // Constants
     private static final int CHUNK_SIZE = 64; // 64x64 blocks per chunk
@@ -29,6 +44,34 @@ public class MapCache {
     
     public MapCache(BiomeGenerator biomeGenerator) {
         this.biomeGenerator = biomeGenerator;
+        startWorkers();
+    }
+
+    private void startWorkers() {
+        if (workersRunning.compareAndSet(false, true)) {
+            for (int i = 0; i < workerCount; i++) {
+                Thread t = new Thread(() -> {
+                    while (workersRunning.get()) {
+                        try {
+                            ChunkTask task = taskQueue.take();
+                            // Only execute if generation is active and seed matches
+                            if (!isGenerating) continue;
+                            if (task.seed != currentSeed) continue;
+                            generateChunk(seedCaches.get(task.seed), task.chunkX, task.chunkZ);
+                        } catch (InterruptedException e) {
+                            // Thread interrupted - exit if we are shutting down
+                            Thread.currentThread().interrupt();
+                            break;
+                        } catch (Exception e) {
+                            System.err.println("[MapCache] Worker error: " + e.getMessage());
+                        }
+                    }
+                }, "MapCache-Worker-" + i);
+                t.setDaemon(true);
+                t.start();
+                workers.add(t);
+            }
+        }
     }
     
     /**
@@ -54,86 +97,140 @@ public class MapCache {
             return x * 31 + z;
         }
     }
+
+    /**
+     * Task for generating a specific chunk, ordered by distance to viewport center.
+     */
+    private static class ChunkTask implements Comparable<ChunkTask> {
+        final long seed;
+        final int chunkX;
+        final int chunkZ;
+        final int centerChunkX;
+        final int centerChunkZ;
+        final long created;
+
+        ChunkTask(long seed, int chunkX, int chunkZ, int centerChunkX, int centerChunkZ) {
+            this.seed = seed;
+            this.chunkX = chunkX;
+            this.chunkZ = chunkZ;
+            this.centerChunkX = centerChunkX;
+            this.centerChunkZ = centerChunkZ;
+            this.created = System.currentTimeMillis();
+        }
+
+        private long distanceSqToCenter() {
+            long dx = chunkX - centerChunkX;
+            long dz = chunkZ - centerChunkZ;
+            return dx * dx + dz * dz;
+        }
+
+        @Override
+        public int compareTo(ChunkTask other) {
+            long d1 = this.distanceSqToCenter();
+            long d2 = other.distanceSqToCenter();
+            int cmp = Long.compare(d1, d2);
+            if (cmp != 0) return cmp;
+            return Long.compare(this.created, other.created);
+        }
+    }
     
     /**
      * Start generating map for a seed - progressive circular loading
      */
-    public CompletableFuture<Void> generateMapAsync(long seed) {
+    /**
+     * Start prioritized, viewport-first generation for a seed.
+     * viewport size is provided in blocks.
+     */
+    public CompletableFuture<Void> generateMapAsync(long seed, int centerX, int centerZ, int viewWidthBlocks, int viewHeightBlocks) {
         // Cancel any existing generation
         cancelGeneration();
-        
+
         currentSeed = seed;
         currentRadius = 0;
         isGenerating = true;
-        
+
+        // Compute viewport center in chunk coordinates
+        this.viewportCenterChunkX = Math.floorDiv(centerX, CHUNK_SIZE);
+        this.viewportCenterChunkZ = Math.floorDiv(centerZ, CHUNK_SIZE);
+
         // Create cache for this seed if it doesn't exist
         seedCaches.computeIfAbsent(seed, k -> new ConcurrentHashMap<>());
-        
-        System.out.println("[MapCache] Starting circular generation for seed: " + seed);
-        
-        // Start progressive generation
-        CompletableFuture<Void> task = CompletableFuture.runAsync(() -> {
+
+        // Ensure BiomeGenerator seed is set once for this generation
+        try {
+            biomeGenerator.setSeed(seed, 0);
+        } catch (Exception e) {
+            System.err.println("[MapCache] Error setting BiomeGenerator seed: " + e.getMessage());
+        }
+
+        // Enqueue viewport-first chunk tasks (with small buffer)
+        int worldLeft = centerX - viewWidthBlocks / 2;
+        int worldTop = centerZ - viewHeightBlocks / 2;
+        int worldRight = worldLeft + viewWidthBlocks - 1;
+        int worldBottom = worldTop + viewHeightBlocks - 1;
+
+        int chunkLeft = Math.floorDiv(worldLeft, CHUNK_SIZE);
+        int chunkTop = Math.floorDiv(worldTop, CHUNK_SIZE);
+        int chunkRight = Math.floorDiv(worldRight, CHUNK_SIZE);
+        int chunkBottom = Math.floorDiv(worldBottom, CHUNK_SIZE);
+
+    final int buffer = 2; // keep a slightly larger buffer around viewport to reduce visible streaming
+        for (int cz = chunkTop - buffer; cz <= chunkBottom + buffer; cz++) {
+            for (int cx = chunkLeft - buffer; cx <= chunkRight + buffer; cx++) {
+                taskQueue.offer(new ChunkTask(seed, cx, cz, viewportCenterChunkX, viewportCenterChunkZ));
+            }
+        }
+
+    // Asynchronously enqueue the rest of the ring-based tasks with priority by distance
+        CompletableFuture<Void> enqueuer = CompletableFuture.runAsync(() -> {
             try {
-                System.out.println("[MapCache] Setting BiomeGenerator seed to: " + seed);
-                biomeGenerator.setSeed(seed, 0); // Set seed for overworld
-                System.out.println("[MapCache] BiomeGenerator seed set successfully to: " + seed);
-                
-                // Generate in expanding circles
                 for (int radius = 0; radius <= MAX_RADIUS && isGenerating; radius++) {
                     currentRadius = radius;
-                    generateRadius(seed, radius);
-                    
-                    // Small delay to allow UI updates
-                    Thread.sleep(radius == 0 ? 0 : 10);
+                    // enqueue ring boundary
+                    for (int x = -radius; x <= radius && isGenerating; x++) {
+                        for (int z = -radius; z <= radius && isGenerating; z++) {
+                            int distanceSquared = x * x + z * z;
+                            int currentRadiusSquared = radius * radius;
+                            int prevRadiusSquared = (radius - 1) * (radius - 1);
+                            if (distanceSquared <= currentRadiusSquared && distanceSquared > prevRadiusSquared) {
+                                int cx = x;
+                                int cz = z;
+                                // Do not enqueue if already in cache (skip duplicates)
+                                Map<ChunkCoord, int[]> cache = seedCaches.get(seed);
+                                if (cache != null && cache.containsKey(new ChunkCoord(cx, cz))) continue;
+                                taskQueue.offer(new ChunkTask(seed, cx, cz, viewportCenterChunkX, viewportCenterChunkZ));
+                            }
+                        }
+                    }
                 }
-                
-                System.out.println("[MapCache] Completed generation for seed: " + seed);
-            } catch (InterruptedException e) {
-                System.out.println("[MapCache] Generation interrupted for seed: " + seed);
             } catch (Exception e) {
-                System.err.println("[MapCache] Error generating seed " + seed + ": " + e.getMessage());
-                e.printStackTrace();
+                System.err.println("[MapCache] Enqueuer error: " + e.getMessage());
             } finally {
+                // mark generation finished once enqueuer completes (workers may still be processing)
                 isGenerating = false;
             }
         }, generationExecutor);
-        
-        generationTasks.put(seed, task);
-        return task;
+
+    generationTasks.put(seed, enqueuer);
+        return enqueuer;
+    }
+
+    /**
+     * Backwards-compatible overload for existing callers that don't supply viewport info.
+     * Uses center (0,0) and a reasonable viewport size.
+     */
+    public CompletableFuture<Void> generateMapAsync(long seed) {
+        int defaultViewBlocks = 1024; // conservative default viewport
+        return generateMapAsync(seed, 0, 0, defaultViewBlocks, defaultViewBlocks);
     }
     
     /**
      * Generate all chunks at a specific radius from center (0,0)
      */
     private void generateRadius(long seed, int radius) {
-        Map<ChunkCoord, int[]> cache = seedCaches.get(seed);
-        if (cache == null) return;
-        
-        if (radius == 0) {
-            // Generate center chunk
-            generateChunk(cache, 0, 0);
-            return;
-        }
-        
-        // Generate chunks in a circle at this radius
-        for (int x = -radius; x <= radius; x++) {
-            for (int z = -radius; z <= radius; z++) {
-                if (!isGenerating) return;
-                
-                // Only generate chunks at exactly this radius (circle boundary)
-                int distanceSquared = x * x + z * z;
-                int currentRadiusSquared = radius * radius;
-                int prevRadiusSquared = (radius - 1) * (radius - 1);
-                
-                if (distanceSquared <= currentRadiusSquared && distanceSquared > prevRadiusSquared) {
-                    generateChunk(cache, x, z);
-                }
-            }
-        }
-        
-        System.out.println("[MapCache] Completed radius " + radius + " for seed " + seed + 
-                          " (" + cache.size() + " chunks cached)");
+        // Deprecated: ring generation is now performed by the enqueuer using ChunkTask priority
     }
+    
     
     /**
      * Generate a single chunk (64x64 blocks)
@@ -145,7 +242,9 @@ public class MapCache {
         if (cache.containsKey(coord)) return;
         
         int[] chunkData = generateChunkData(chunkX, chunkZ);
-        cache.put(coord, chunkData);
+        if (chunkData != null) {
+            cache.put(coord, chunkData);
+        }
     }
     
     /**
@@ -153,34 +252,41 @@ public class MapCache {
      */
     private int[] generateChunkData(int chunkX, int chunkZ) {
         int[] chunkData = new int[CHUNK_SIZE * CHUNK_SIZE];
-        
-        // Generate biomes for this chunk
-        for (int localZ = 0; localZ < CHUNK_SIZE; localZ++) {
-            for (int localX = 0; localX < CHUNK_SIZE; localX++) {
-                int worldX = chunkX * CHUNK_SIZE + localX;
-                int worldZ = chunkZ * CHUNK_SIZE + localZ;
-                
-                try {
-                    // Convert to biome coordinates (scale 4)
+        // Optimize: biome coordinates change every 4 blocks (>>2). Sample per biome cell (4x4 blocks)
+        final int BIOME_SCALE = 4;
+        int cells = CHUNK_SIZE / BIOME_SCALE; // CHUNK_SIZE assumed divisible by 4
+        try {
+            for (int cellZ = 0; cellZ < cells; cellZ++) {
+                for (int cellX = 0; cellX < cells; cellX++) {
+                    int worldX = chunkX * CHUNK_SIZE + cellX * BIOME_SCALE;
+                    int worldZ = chunkZ * CHUNK_SIZE + cellZ * BIOME_SCALE;
                     int biomeX = worldX >> 2;
                     int biomeZ = worldZ >> 2;
-                    
                     int biomeId = biomeGenerator.getBiomeAt(biomeX, 64, biomeZ);
-                    chunkData[localZ * CHUNK_SIZE + localX] = biomeId;
-                } catch (Exception e) {
-                    chunkData[localZ * CHUNK_SIZE + localX] = 0; // Default to ocean
+
+                    // Fill the 4x4 block for this biome cell
+                    int baseX = cellX * BIOME_SCALE;
+                    int baseZ = cellZ * BIOME_SCALE;
+                    for (int lz = 0; lz < BIOME_SCALE; lz++) {
+                        int row = (baseZ + lz) * CHUNK_SIZE;
+                        for (int lx = 0; lx < BIOME_SCALE; lx++) {
+                            chunkData[row + baseX + lx] = biomeId;
+                        }
+                    }
                 }
             }
+            return chunkData;
+        } catch (Exception e) {
+            System.err.println("[MapCache] Error generating chunk (" + chunkX + "," + chunkZ + "): " + e.getMessage());
+            return null;
         }
-        
-        return chunkData;
     }
     
     /**
      * Get biome data for a specific area from cache
      */
     public int[] getBiomeArea(long seed, int centerX, int centerZ, int width, int height, int zoomLevel) {
-        System.out.println("[MapCache] getBiomeArea called - seed: " + seed + ", center: (" + centerX + ", " + centerZ + "), size: " + width + "x" + height + ", zoom: " + zoomLevel);
+    // Reduced logging: removed noisy prints for performance
         
         Map<ChunkCoord, int[]> cache = seedCaches.get(seed);
         if (cache == null) {
@@ -197,13 +303,7 @@ public class MapCache {
         int blocksHeight = height * zoomLevel;
         
         // Ensure we have the biome generator set up for this seed
-        if (biomeGenerator != null) {
-            try {
-                biomeGenerator.setSeed(seed, 0);
-            } catch (Exception e) {
-                System.err.println("[MapCache] Error setting seed: " + e.getMessage());
-            }
-        }
+    // BiomeGenerator seed is set once during generation; leave unchanged here for performance
         
         for (int pixelZ = 0; pixelZ < height; pixelZ++) {
             for (int pixelX = 0; pixelX < width; pixelX++) {
@@ -219,9 +319,9 @@ public class MapCache {
                 int[] chunkData = cache.get(coord);
                 
                 if (chunkData == null) {
-                    // Generate chunk on-demand
+                    // Generate chunk on-demand (synchronous fallback)
                     chunkData = generateChunkData(chunkX, chunkZ);
-                    cache.put(coord, chunkData);
+                    if (chunkData != null) cache.put(coord, chunkData);
                 }
                 
                 if (chunkData != null) {
@@ -249,7 +349,6 @@ public class MapCache {
             }
         }
         
-        System.out.println("[MapCache] getBiomeArea returning array of " + result.length + " elements");
         return result;
     }
     
@@ -271,6 +370,40 @@ public class MapCache {
         
         return Math.min(1.0f, (float) currentRadius / MAX_RADIUS);
     }
+
+    /**
+     * Get generation progress focused on a viewport (returns 0.0 to 1.0).
+     * This computes how many chunks covering the viewport are currently cached.
+     * viewport dimensions must be provided in world blocks.
+     */
+    public float getGenerationProgressForViewport(long seed, int centerX, int centerZ, int widthBlocks, int heightBlocks) {
+        Map<ChunkCoord, int[]> cache = seedCaches.get(seed);
+        if (cache == null || cache.isEmpty()) return 0.0f;
+
+        // Determine chunk range covering the viewport
+        int worldLeft = centerX - widthBlocks / 2;
+        int worldTop = centerZ - heightBlocks / 2;
+        int worldRight = worldLeft + widthBlocks - 1;
+        int worldBottom = worldTop + heightBlocks - 1;
+
+        int chunkLeft = Math.floorDiv(worldLeft, CHUNK_SIZE);
+        int chunkTop = Math.floorDiv(worldTop, CHUNK_SIZE);
+        int chunkRight = Math.floorDiv(worldRight, CHUNK_SIZE);
+        int chunkBottom = Math.floorDiv(worldBottom, CHUNK_SIZE);
+
+        int totalChunks = (chunkRight - chunkLeft + 1) * (chunkBottom - chunkTop + 1);
+        if (totalChunks <= 0) return 0.0f;
+
+        int present = 0;
+        for (int cz = chunkTop; cz <= chunkBottom; cz++) {
+            for (int cx = chunkLeft; cx <= chunkRight; cx++) {
+                ChunkCoord coord = new ChunkCoord(cx, cz);
+                if (cache.containsKey(coord)) present++;
+            }
+        }
+
+        return Math.min(1.0f, (float) present / (float) totalChunks);
+    }
     
     /**
      * Get number of chunks loaded for a seed
@@ -289,6 +422,7 @@ public class MapCache {
         if (currentTask != null) {
             currentTask.cancel(true);
         }
+    taskQueue.clear();
     }
     
     /**
