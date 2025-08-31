@@ -76,7 +76,7 @@ public class MapTileRenderer {
         
         // Clean up old tiles if cache is too full
         if (tileCache.size() > MAX_CACHED_TILES) {
-            cleanupOldTiles();
+            cleanupOldTiles(tileLeft, tileTop, tileRight, tileBottom);
         }
     }
     
@@ -98,6 +98,11 @@ public class MapTileRenderer {
             }
         }
         
+        // Touch tile last-access time when used
+        if (tile != null) {
+            tile.touch();
+        }
+
         // Render tile if ready
         if (tile != null && tile.biomeData != null) {
             renderTileData(context, tile, tileX, tileZ, screenX, screenY, 
@@ -188,7 +193,7 @@ public class MapTileRenderer {
             return null; // Data not ready yet
         }
         
-        return new CachedTile(biomeData, System.currentTimeMillis());
+    return new CachedTile(biomeData, System.currentTimeMillis());
     }
     
     /**
@@ -210,13 +215,7 @@ public class MapTileRenderer {
         };
     }
     
-    /**
-     * Remove old tiles when cache gets too full
-     */
-    private void cleanupOldTiles() {
-        long cutoffTime = System.currentTimeMillis() - 60000; // 60 seconds
-        tileCache.entrySet().removeIf(entry -> entry.getValue().createdAt < cutoffTime);
-    }
+    // legacy cleanup removed - using cleanupOldTiles(int,int,int,int) instead
     
     /**
      * Clear all cached tiles (call when changing seeds)
@@ -267,14 +266,54 @@ public class MapTileRenderer {
     private static class CachedTile {
         final int[] biomeData;
         final long createdAt;
+    volatile long lastAccess;
         
         CachedTile(int[] biomeData, long createdAt) {
             this.biomeData = biomeData;
             this.createdAt = createdAt;
+            this.lastAccess = createdAt;
         }
         
+        void touch() {
+            this.lastAccess = System.currentTimeMillis();
+        }
+
         boolean isExpired() {
             return System.currentTimeMillis() - createdAt > 120000; // 2 minutes
+        }
+    }
+
+    /**
+     * Evict tiles outside the visible tile bbox (with a small buffer) first, then
+     * fall back to LRU eviction until the cache size is under MAX_CACHED_TILES.
+     */
+    private void cleanupOldTiles(int tileLeft, int tileTop, int tileRight, int tileBottom) {
+        // Keep a small buffer of tiles around the viewport to avoid thrash when panning
+        final int buffer = 2; // tiles
+
+        int keepLeft = tileLeft - buffer;
+        int keepTop = tileTop - buffer;
+        int keepRight = tileRight + buffer;
+        int keepBottom = tileBottom + buffer;
+
+        // First pass: remove tiles completely outside the buffered area
+        tileCache.entrySet().removeIf(entry -> {
+            TileKey key = entry.getKey();
+            return key.tileX < keepLeft || key.tileX > keepRight ||
+                   key.tileZ < keepTop || key.tileZ > keepBottom;
+        });
+
+        // If still too big, evict oldest-accessed tiles (LRU approximation)
+        if (tileCache.size() <= MAX_CACHED_TILES) return;
+
+        // Build an array of entries and sort by lastAccess ascending
+        java.util.List<Map.Entry<TileKey, CachedTile>> entries = new java.util.ArrayList<>(tileCache.entrySet());
+        entries.sort((a, b) -> Long.compare(a.getValue().lastAccess, b.getValue().lastAccess));
+
+        int idx = 0;
+        while (tileCache.size() > MAX_CACHED_TILES && idx < entries.size()) {
+            tileCache.remove(entries.get(idx).getKey());
+            idx++;
         }
     }
 }

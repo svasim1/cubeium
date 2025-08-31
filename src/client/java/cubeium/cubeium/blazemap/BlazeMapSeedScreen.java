@@ -213,8 +213,11 @@ public class BlazeMapSeedScreen extends Screen {
             return;
         }
         
-        // ADDITIONAL SAFETY: Only render if map cache has sufficient data
-        float progress = mapCache.getGenerationProgress(currentSeed);
+    // ADDITIONAL SAFETY: Only render if map cache has sufficient data
+    // Compute progress focused only on the visible viewport to avoid global world progress numbers
+    int viewWidthBlocks = (mapWidth - 2) * zoomLevel;
+    int viewHeightBlocks = (mapHeight - 2) * zoomLevel;
+    float progress = mapCache.getGenerationProgressForViewport(currentSeed, mapCenterX, mapCenterZ, viewWidthBlocks, viewHeightBlocks);
         if (progress < 0.05f) { // Wait for at least 5% of data to be cached
             // TEMPORARILY DISABLE loading screen fill that might be covering test squares
             // context.fill(mapX + 1, mapY + 1, mapX + mapWidth - 1, mapY + mapHeight - 1, 0xFF1a1a2e);
@@ -236,12 +239,12 @@ public class BlazeMapSeedScreen extends Screen {
         
     // Loading progress overlay removed per UI cleanup
         
-        // Show cache statistics
+        // Show cache statistics (viewport-focused progress)
         if (mapCache.hasCachedData(currentSeed)) {
             String stats = String.format("Chunks: %d | Tiles: %d | Progress: %.0f%%", 
                 mapCache.getChunkCount(currentSeed),
                 tileRenderer.getCachedTileCount(),
-                mapCache.getGenerationProgress(currentSeed) * 100);
+                progress * 100);
             context.drawText(textRenderer, stats, mapX + 5, mapY + 5, 0xFF888888, true);
         }
     }
@@ -386,6 +389,14 @@ public class BlazeMapSeedScreen extends Screen {
             // map generation completed log removed
         }).exceptionally(throwable -> {
             // map generation failed log removed
+            return null;
+        });
+        // Start viewport-prioritized generation: pass view size in blocks
+        int viewWidthBlocks = Math.max(1, (mapWidth - 2) * zoomLevel);
+        int viewHeightBlocks = Math.max(1, (mapHeight - 2) * zoomLevel);
+        mapCache.generateMapAsync(seedToUse, mapCenterX, mapCenterZ, viewWidthBlocks, viewHeightBlocks).thenRun(() -> {
+            // map generation completed for prioritized queue
+        }).exceptionally(throwable -> {
             return null;
         });
         
