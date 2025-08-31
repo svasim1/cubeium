@@ -45,7 +45,7 @@ dependencies {
 // Native Library (Cubiomes) Build Tasks
 // ========================================
 
-def cubiomesDir = file('cubiomes')
+def cubiomesDir = file('cubiomesBuild')
 def cubiomesBuildDir = file("${cubiomesDir}/build")
 def cubiomesLibDir = file("${cubiomesDir}/lib")
 def nativeResourcesDir = file('src/main/resources/natives')
