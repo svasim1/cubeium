@@ -14,7 +14,7 @@ import java.util.Objects;
  * Provides efficient biome data generation with caching and async processing.
  */
 public class BiomeGenerator {
-    private static final int DEFAULT_MC_VERSION = CubiomesInterface.MC_1_21_4;
+    private static final int DEFAULT_MC_VERSION = CubiomesInterface.MC_1_21;
     private static final int DEFAULT_SCALE = 4; // Biome coordinate scale
     private static final int CACHE_LIMIT = 10000; // Maximum cached regions
     
@@ -85,6 +85,9 @@ public class BiomeGenerator {
     public void setSeed(long seed, int dimension) {
         synchronized (generatorLock) {
             if (this.currentSeed != seed || this.dimension != dimension) {
+                // Debug logging for seed changes
+                System.out.println(String.format("[BiomeGenerator] setSeed called: seed=%d, dimension=%d", seed, dimension));
+                
                 this.currentSeed = seed;
                 this.dimension = dimension;
                 
@@ -123,7 +126,17 @@ public class BiomeGenerator {
         
         synchronized (generatorLock) {
             try {
-                return CubiomesInterface.getBiomeAt(generatorHandle, 1, x, y, z);
+                // Use scale = 4 for biome coordinates (standard for most biome maps)
+                // This matches what most cubiomes-based websites use
+                int biomeId = CubiomesInterface.getBiomeAt(generatorHandle, 4, x, y, z);
+                
+                // Debug logging for specific coordinates that we see in UI logs
+                if ((x >= -5 && x <= 5) && (z >= -5 && z <= 5)) {
+                    System.out.println(String.format("[BiomeGenerator] getBiomeAt: seed=%d, x=%d, y=%d, z=%d, biome=%d", 
+                        currentSeed, x, y, z, biomeId));
+                }
+                
+                return biomeId;
             } catch (Exception e) {
                 throw new RuntimeException("Failed to get biome at (" + x + ", " + y + ", " + z + "): " + e.getMessage(), e);
             }

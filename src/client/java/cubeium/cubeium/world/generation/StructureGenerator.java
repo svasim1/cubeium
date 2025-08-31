@@ -16,7 +16,7 @@ import java.util.Objects;
  * Provides efficient structure finding with caching and validation.
  */
 public class StructureGenerator {
-    private static final int DEFAULT_MC_VERSION = CubiomesInterface.MC_1_21_4;
+    private static final int DEFAULT_MC_VERSION = CubiomesInterface.MC_1_21;
     private static final int CACHE_LIMIT = 5000; // Maximum cached structure searches
     
     // Generator state
@@ -286,6 +286,55 @@ public class StructureGenerator {
     }
     
     /**
+     * Find structures in a rectangular region
+     * @param worldX Starting world X coordinate
+     * @param worldZ Starting world Z coordinate
+     * @param width Region width in blocks
+     * @param height Region height in blocks
+     * @return List of structures in the region
+     */
+    public List<StructurePos> findStructuresInRegion(int worldX, int worldZ, int width, int height) {
+        // Find all possible structure types in the region
+        List<StructurePos> allStructures = new ArrayList<>();
+        
+        // Common structure types to search for
+        int[] structureTypes = {
+            CubiomesInterface.VILLAGE,
+            CubiomesInterface.DESERT_PYRAMID,
+            CubiomesInterface.JUNGLE_TEMPLE,
+            CubiomesInterface.SWAMP_HUT,
+            CubiomesInterface.IGLOO,
+            CubiomesInterface.OUTPOST,
+            CubiomesInterface.OCEAN_MONUMENT,
+            CubiomesInterface.WOODLAND_MANSION,
+            CubiomesInterface.NETHER_FORTRESS
+        };
+        
+        int centerX = worldX + width / 2;
+        int centerZ = worldZ + height / 2;
+        int searchRadius = Math.max(width, height) / 2;
+        
+        for (int structureType : structureTypes) {
+            try {
+                List<StructurePos> structures = findStructures(structureType, centerX, centerZ, searchRadius, 100);
+                
+                // Filter to only include structures actually in the region
+                for (StructurePos structure : structures) {
+                    if (structure.x >= worldX && structure.x < worldX + width &&
+                        structure.z >= worldZ && structure.z < worldZ + height) {
+                        allStructures.add(structure);
+                    }
+                }
+            } catch (Exception e) {
+                // Continue searching other structure types even if one fails
+                System.err.println("Error finding " + structureType + " structures: " + e.getMessage());
+            }
+        }
+        
+        return allStructures;
+    }
+    
+    /**
      * Find structures asynchronously
      * @param structureType Structure type ID
      * @param centerX Center X coordinate
@@ -402,6 +451,7 @@ public class StructureGenerator {
     public static class StructurePos {
         public final int x, z;
         public final int structureType;
+        public final StructureType type;
         public final int regionX, regionZ;
         public final boolean isViable;
         
@@ -409,6 +459,7 @@ public class StructureGenerator {
             this.x = x;
             this.z = z;
             this.structureType = structureType;
+            this.type = StructureType.fromId(structureType);
             this.regionX = regionX;
             this.regionZ = regionZ;
             this.isViable = isViable;
@@ -424,6 +475,14 @@ public class StructureGenerator {
             } catch (Exception e) {
                 return "Unknown Structure";
             }
+        }
+        
+        /**
+         * Get display name for the structure type
+         * @return Display name
+         */
+        public String getDisplayName() {
+            return getTypeName();
         }
         
         /**
