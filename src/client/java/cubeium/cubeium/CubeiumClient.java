@@ -2,7 +2,6 @@ package cubeium.cubeium;
 
 import org.lwjgl.glfw.GLFW;
 
-import cubeium.cubeium.world.test.JNITestRunner;
 import cubeium.cubeium.blazemap.BlazeMapSeedScreen;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -43,8 +42,7 @@ public class CubeiumClient implements ClientModInitializer {
             }
         });
 
-        // Run comprehensive JNI tests for Task 1.6
-        JNITestRunner.runComprehensiveTests();
+    // JNI test runner removed from client initialization to avoid runtime/compile-time dependency
 
         Cubeium.LOGGER.info("Client initialization complete!");
     }

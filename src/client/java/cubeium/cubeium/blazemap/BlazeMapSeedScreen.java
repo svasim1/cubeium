@@ -401,6 +401,10 @@ public class BlazeMapSeedScreen extends Screen {
         });
         
         // Map generation started - rendering will load from cache progressively
+        // Warm visible tiles in background so the tile cache is populated and the UI "Tiles:" counter updates
+        if (tileRenderer != null) {
+            tileRenderer.prewarmTiles(seedToUse, mapCenterX, mapCenterZ, mapWidth - 2, mapHeight - 2, zoomLevel);
+        }
     }
     
     /**
