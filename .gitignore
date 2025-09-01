@@ -41,6 +41,8 @@ replay_*.log
 
 # Instructions
 instructions/
+documentation.txt
+documentation/
 
 # Cubiomes
 cubiomes/
