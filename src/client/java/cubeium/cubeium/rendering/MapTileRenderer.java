@@ -223,6 +223,59 @@ public class MapTileRenderer {
     public void clearCache() {
         tileCache.clear();
     }
+
+    /**
+     * Pre-generate and cache tiles covering the given viewport in the background.
+     * This is a best-effort warm-up and will not block the calling thread.
+     * Parameters match the call-site in BlazeMapSeedScreen: width/height are in
+     * screen pixels, zoomLevel is blocks-per-pixel.
+     */
+    public void prewarmTiles(long seed, int centerX, int centerZ, int widthPx, int heightPx, int zoomLevel) {
+        // Run asynchronously so UI thread isn't blocked
+        new Thread(() -> {
+            try {
+                int blocksPerPixel = Math.max(1, zoomLevel);
+                int viewWidthBlocks = Math.max(1, widthPx * blocksPerPixel);
+                int viewHeightBlocks = Math.max(1, heightPx * blocksPerPixel);
+
+                int worldLeft = centerX - viewWidthBlocks / 2;
+                int worldTop = centerZ - viewHeightBlocks / 2;
+                int worldRight = worldLeft + viewWidthBlocks;
+                int worldBottom = worldTop + viewHeightBlocks;
+
+                int tileLeft = Math.floorDiv(worldLeft, TILE_SIZE);
+                int tileTop = Math.floorDiv(worldTop, TILE_SIZE);
+                int tileRight = Math.floorDiv(worldRight, TILE_SIZE);
+                int tileBottom = Math.floorDiv(worldBottom, TILE_SIZE);
+
+                // Safety clamp to avoid accidentally warming a massive area
+                final int MAX_PREWARM_RADIUS = 64; // tiles in each direction
+                tileLeft = Math.max(tileLeft, -MAX_PREWARM_RADIUS);
+                tileTop = Math.max(tileTop, -MAX_PREWARM_RADIUS);
+                tileRight = Math.min(tileRight, MAX_PREWARM_RADIUS);
+                tileBottom = Math.min(tileBottom, MAX_PREWARM_RADIUS);
+
+                for (int tz = tileTop; tz <= tileBottom; tz++) {
+                    for (int tx = tileLeft; tx <= tileRight; tx++) {
+                        TileKey key = new TileKey(seed, tx, tz, zoomLevel);
+                        if (tileCache.containsKey(key)) continue;
+
+                        try {
+                            CachedTile t = generateTile(seed, tx, tz, zoomLevel);
+                            if (t != null) {
+                                tileCache.put(key, t);
+                            }
+                        } catch (Throwable ignored) {
+                            // Ignore individual tile failures during warm-up
+                        }
+                    }
+                }
+            } catch (Throwable ex) {
+                // Defensive: never let warm-up crash the game
+                System.err.println("[MapTileRenderer] prewarmTiles failed: " + ex.getMessage());
+            }
+        }, "MapTileRenderer-Prewarm").start();
+    }
     
     /**
      * Get cache statistics
