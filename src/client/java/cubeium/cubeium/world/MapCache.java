@@ -294,7 +294,7 @@ public class MapCache {
             seedCaches.put(seed, cache);
         }
         
-        System.out.println("[MapCache] Cache found for seed: " + seed + " with " + cache.size() + " chunks");
+        //System.out.println("[MapCache] Cache found for seed: " + seed + " with " + cache.size() + " chunks");
         
         int[] result = new int[width * height];
         

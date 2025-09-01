@@ -132,8 +132,7 @@ public class BiomeGenerator {
                 
                 // Debug logging for specific coordinates that we see in UI logs
                 if ((x >= -5 && x <= 5) && (z >= -5 && z <= 5)) {
-                    System.out.println(String.format("[BiomeGenerator] getBiomeAt: seed=%d, x=%d, y=%d, z=%d, biome=%d", 
-                        currentSeed, x, y, z, biomeId));
+                    //System.out.println(String.format("[BiomeGenerator] getBiomeAt: seed=%d, x=%d, y=%d, z=%d, biome=%d", currentSeed, x, y, z, biomeId));
                 }
                 
                 return biomeId;
