@@ -80,10 +80,23 @@ def getArchName() {
 def osName = getOSName()
 def archName = getArchName()
 
+def isCmakeAvailable() {
+	try {
+		def result = ['cmake', '--version'].execute()
+		result.waitFor()
+		return result.exitValue() == 0
+	} catch (Exception ignored) {
+		return false
+	}
+}
+
+def cmakeAvailable = isCmakeAvailable()
+
 // Task to configure CMake
 task configureCubiomes(type: Exec) {
 	group = 'native'
 	description = 'Configure cubiomes library with CMake'
+	onlyIf { cmakeAvailable }
 	
 	workingDir cubiomesDir
 	
@@ -123,6 +136,7 @@ task buildCubiomes(type: Exec) {
 	group = 'native'
 	description = 'Build cubiomes shared library'
 	dependsOn configureCubiomes
+	onlyIf { cmakeAvailable }
 	
 	workingDir cubiomesDir
 	
@@ -143,6 +157,7 @@ task copyNativeLibraries(type: Copy) {
 	group = 'native'
 	description = 'Copy native libraries to resources directory'
 	dependsOn buildCubiomes
+	onlyIf { cmakeAvailable }
 	
 	from cubiomesLibDir
 	into "${nativeResourcesDir}/${osName}/${archName}"
@@ -268,17 +283,10 @@ task checkNativeBuildRequirements {
 
 // Make native library building part of the main build process (but only if CMake is available)
 // For development without CMake, you can skip native compilation with: ./gradlew build -x copyNativeLibraries
-try {
-	def result = ['cmake', '--version'].execute()
-	result.waitFor()
-	if (result.exitValue() == 0) {
-		compileJava.dependsOn copyNativeLibraries
-		println "CMake found - native libraries will be built automatically"
-	} else {
-		println "CMake not available - skipping native library build"
-		println "Run './gradlew checkNativeBuildRequirements' for setup instructions"
-	}
-} catch (Exception e) {
+if (cmakeAvailable) {
+	compileJava.dependsOn copyNativeLibraries
+	println "CMake found - native libraries will be built automatically"
+} else {
 	println "CMake not available - skipping native library build"
 	println "Run './gradlew checkNativeBuildRequirements' for setup instructions"
 }
@@ -287,8 +295,10 @@ clean.dependsOn cleanCubiomes
 processResources {
 	inputs.property "version", project.version
 	
-	// Declare explicit dependency on native libraries
-	dependsOn copyNativeLibraries
+	// Only build/copy natives when CMake is available.
+	if (cmakeAvailable) {
+		dependsOn copyNativeLibraries
+	}
 	
 	// Include native libraries in the jar
 	from(nativeResourcesDir) {
@@ -319,7 +329,9 @@ java {
 
 // Ensure sourcesJar waits for native libraries
 tasks.sourcesJar {
-	dependsOn copyNativeLibraries
+	if (cmakeAvailable) {
+		dependsOn copyNativeLibraries
+	}
 }
 
 jar {

@@ -225,14 +225,6 @@ public class MapCache {
     }
     
     /**
-     * Generate all chunks at a specific radius from center (0,0)
-     */
-    private void generateRadius(long seed, int radius) {
-        // Deprecated: ring generation is now performed by the enqueuer using ChunkTask priority
-    }
-    
-    
-    /**
      * Generate a single chunk (64x64 blocks)
      */
     private void generateChunk(Map<ChunkCoord, int[]> cache, int chunkX, int chunkZ) {
