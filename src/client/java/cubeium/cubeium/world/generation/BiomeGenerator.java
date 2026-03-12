@@ -15,7 +15,6 @@ import java.util.Objects;
  */
 public class BiomeGenerator {
     private static final int DEFAULT_MC_VERSION = CubiomesInterface.MC_1_21;
-    private static final int DEFAULT_SCALE = 4; // Biome coordinate scale
     private static final int CACHE_LIMIT = 10000; // Maximum cached regions
     
     // Generator state

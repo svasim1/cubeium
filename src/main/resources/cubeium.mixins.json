@@ -2,9 +2,7 @@
 	"required": true,
 	"package": "cubeium.cubeium.mixin",
 	"compatibilityLevel": "JAVA_21",
-	"mixins": [
-		"ExampleMixin"
-	],
+	"mixins": [],
 	"injectors": {
 		"defaultRequire": 1
 	}

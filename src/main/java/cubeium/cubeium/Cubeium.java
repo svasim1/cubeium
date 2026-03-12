@@ -16,9 +16,12 @@ public class Cubeium implements ModInitializer {
 
 	@Override
 	public void onInitialize() {
-		LOGGER.info("Initializing Cubeium mod...");
+		LOGGER.info("[Cubeium] Main initializer starting (modId={}, java={}, os={})",
+				MOD_ID,
+				System.getProperty("java.version"),
+				System.getProperty("os.name"));
 
 		// Key binding registration is handled in CubeiumClient.java
-		LOGGER.info("Cubeium mod initialized!");
+		LOGGER.info("[Cubeium] Main initializer complete");
 	}
 }
