@@ -1,27 +1,37 @@
 package cubeium.cubeium.blazemap;
 
-import cubeium.cubeium.world.generation.BiomeGenerator;
-import cubeium.cubeium.world.MapCache;
-import cubeium.cubeium.rendering.MapTileRenderer;
+import cubeium.cubeium.Cubeium;
 import cubeium.cubeium.gui.MouseSubpixelSmoother;
+import cubeium.cubeium.rendering.MapTileRenderer;
 import cubeium.cubeium.ui.SeedInputWidget;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.widget.ButtonWidget;
+import cubeium.cubeium.util.RenderMetrics;
+import cubeium.cubeium.world.MapCache;
+import cubeium.cubeium.world.generation.BiomeGenerator;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.gui.widget.TextFieldWidget;
+import net.minecraft.client.render.RenderLayer;
 import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
 
 /**
  * Complete BlazeMap-style seed map screen.
  * Features professional map rendering, smooth navigation, and precise coordinate system.
  */
 public class BlazeMapSeedScreen extends Screen {
+    private static SeedMapSession sharedSession;
+    private static final Identifier NAVIGATION_ICON_TEXTURE = Identifier.of("cubeium", "textures/gui/navigation_icon.png");
+    private static final Identifier SETTINGS_ICON_TEXTURE = Identifier.of("cubeium", "textures/gui/settings_icon.png");
     
     // Core systems
-    private final BiomeGenerator biomeGenerator;
+    private static final long SEED_GENERATE_DEBOUNCE_MS = 450L;
     private final MapCache mapCache;
     private final MapTileRenderer tileRenderer;
     private final MouseSubpixelSmoother mouseSmoother;
+    private final SeedMapSession session;
+    private MarkerRenderer markerRenderer;
     
     // Map state (Fixed to match working SeedMapScreen approach)
     private long currentSeed = 0L;
@@ -30,46 +40,54 @@ public class BlazeMapSeedScreen extends Screen {
     private int mapCenterX = 0; // FIXED: Use int like SeedMapScreen, not double
     private int mapCenterZ = 0; // FIXED: Use int like SeedMapScreen, not double
     private int zoomLevel = 4; // FIXED: Use SeedMapScreen default - 4 blocks per pixel
+    private long pendingSeed = Long.MIN_VALUE;
+    private long pendingGenerateAtMillis = -1L;
+    private long lastGeneratedSeed = Long.MIN_VALUE;
     
     // UI components
     private SeedInputWidget seedInput;
-    private ButtonWidget generateButton;
-    private ButtonWidget resetViewButton;
+    private ButtonWidget navigationMenuButton;
+    private TextFieldWidget travelXInput;
+    private TextFieldWidget travelZInput;
+    private ButtonWidget travelGoButton;
+    private ButtonWidget travelOriginButton;
+    private ButtonWidget settingsButton;
+    private boolean isNavigationMenuOpen = false;
     
     // Mouse state
     private boolean isDragging = false;
-    private boolean showCoordinates = true;
-    private boolean showPerformanceInfo = true;
+
+    // Last-hovered info box state (persists when mouse leaves map)
+    private int lastInfoWorldX = 0;
+    private int lastInfoWorldZ = 0;
+    private String lastInfoBiomeName = "";
+    private int lastInfoBiomeColor = 0xFF888888;
+    private boolean hasInfoBoxData = false;
+
+    // Per-frame hover sample cache so all overlays read identical biome/coords.
+    private final HoverSample hoverSample = new HoverSample();
     
     // Viewport
     private int mapX, mapY, mapWidth, mapHeight;
     
     public BlazeMapSeedScreen() {
         super(Text.empty());
-        
+
         try {
-            // initialization log removed
-            biomeGenerator = new BiomeGenerator();
-            // init log removed
-            
-            mapCache = new MapCache(biomeGenerator);
-            // init log removed
-            
-            tileRenderer = new MapTileRenderer(mapCache);
-            // init log removed
-            
+            session = getOrCreateSession();
+            mapCache = session.mapCache;
+            tileRenderer = session.tileRenderer;
             mouseSmoother = new MouseSubpixelSmoother();
-            // init log removed
-            
-            // DO NOT initialize with any seed - wait for user input only
-            currentSeed = 0L; // No default seed
-            hasValidSeed = false;
-            
-            updateScale();
-            // init log removed
+
+            currentSeed = session.currentSeed;
+            hasValidSeed = session.hasValidSeed;
+            mapGenerated = session.mapGenerated;
+            mapCenterX = session.mapCenterX;
+            mapCenterZ = session.mapCenterZ;
+            zoomLevel = session.zoomLevel;
+            lastGeneratedSeed = session.lastGeneratedSeed;
         } catch (Exception e) {
             // initialization error log removed
-            e.printStackTrace();
             throw new RuntimeException("BlazeMapSeedScreen initialization failed", e);
         }
     }
@@ -85,49 +103,136 @@ public class BlazeMapSeedScreen extends Screen {
         mapHeight = height - 100;
         
         // Seed input field (BlazeMap-style positioned)
+        int topBarX = 10;
+        int topBarY = 20;
         seedInput = new SeedInputWidget(
             textRenderer,
-            width / 2 - 100, 
-            20,
+            topBarX,
+            topBarY,
             this::onSeedChanged
         );
         addDrawableChild(seedInput);
         
-        // Generate button
-        generateButton = ButtonWidget.builder(Text.literal("Generate"), button -> generateMap())
-                .dimensions(width / 2 - 150, 45, 70, 20)
+        // Navigation menu button (icon can be swapped in later)
+        navigationMenuButton = ButtonWidget.builder(Text.empty(), button -> toggleNavigationMenu())
+            .dimensions(topBarX + 206, topBarY, 20, 20)
                 .build();
-        addDrawableChild(generateButton);
-        
-    // Random seed button removed per request
-        
-        // Reset view button
-        resetViewButton = ButtonWidget.builder(Text.literal("Reset View"), button -> resetView())
-                .dimensions(width / 2 + 5, 45, 80, 20)
-                .build();
-        addDrawableChild(resetViewButton);
-        
-        // Try to get current world seed like the working SeedMapScreen
-        tryGetWorldSeed();
-        
-        // Update button state after initialization
-        if (generateButton != null) {
-            generateButton.active = hasValidSeed;
+        addDrawableChild(navigationMenuButton);
+
+        travelOriginButton = ButtonWidget.builder(Text.literal("Origin (0, 0)"), button -> {
+                resetView();
+                isNavigationMenuOpen = false;
+                syncNavigationMenuState();
+            })
+            .dimensions(0, 0, 190, 20)
+            .build();
+        addDrawableChild(travelOriginButton);
+
+        travelXInput = new TextFieldWidget(textRenderer, 0, 0, 82, 20, Text.literal("X"));
+        travelXInput.setPlaceholder(Text.literal("X"));
+        travelXInput.setMaxLength(12);
+        addDrawableChild(travelXInput);
+
+        travelZInput = new TextFieldWidget(textRenderer, 0, 0, 82, 20, Text.literal("Z"));
+        travelZInput.setPlaceholder(Text.literal("Z"));
+        travelZInput.setMaxLength(12);
+        addDrawableChild(travelZInput);
+
+        travelGoButton = ButtonWidget.builder(Text.literal("Go"), button -> travelToCoordinates())
+            .dimensions(0, 0, 44, 20)
+            .build();
+        addDrawableChild(travelGoButton);
+
+        layoutNavigationMenuWidgets();
+
+        settingsButton = ButtonWidget.builder(Text.empty(), button -> openSettings())
+            .dimensions(width - 30, 20, 20, 20)
+            .build();
+        addDrawableChild(settingsButton);
+
+        // Initialize marker renderer and origin marker
+        markerRenderer = new MarkerRenderer();
+        if (session.markers.isEmpty()) {
+            session.markers.add(new MapMarker(MapMarker.MarkerType.ORIGIN, 0, 0, "Origin (0, 0)"));
+        }
+
+        syncNavigationMenuState();
+
+        if (session.seedInputText != null && !session.seedInputText.isEmpty()) {
+            seedInput.setText(session.seedInputText);
+        } else if (mapGenerated || hasValidSeed) {
+            seedInput.setText(Long.toString(currentSeed));
+        } else {
+            // Try to get current world seed like the working SeedMapScreen
+            tryGetWorldSeed();
         }
         
     // UI init log removed
     }
     
     private void onSeedChanged(long seed, boolean isValid) {
-    // seed change log removed
-        this.currentSeed = seed;
+        String seedText = seedInput != null ? seedInput.getText().trim() : "";
         this.hasValidSeed = isValid;
-        // IMPORTANT: Do NOT set mapGenerated = true here - only when user clicks Generate
-        // This prevents automatic map generation when world seed is loaded
-        
-        // Only set button active if button exists (avoid null pointer during initialization)
-        if (this.generateButton != null) {
-            this.generateButton.active = isValid;
+
+        if (!isValid || seedText.isEmpty()) {
+            pendingSeed = Long.MIN_VALUE;
+            pendingGenerateAtMillis = -1L;
+            return;
+        }
+
+        if (seed == lastGeneratedSeed) {
+            pendingSeed = Long.MIN_VALUE;
+            pendingGenerateAtMillis = -1L;
+            return;
+        }
+
+        pendingSeed = seed;
+        pendingGenerateAtMillis = System.currentTimeMillis() + SEED_GENERATE_DEBOUNCE_MS;
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+
+        if (pendingGenerateAtMillis <= 0L || pendingSeed == Long.MIN_VALUE) {
+            updatePlayerMarker();
+            return;
+        }
+
+        if (System.currentTimeMillis() >= pendingGenerateAtMillis) {
+            long seedForGeneration = pendingSeed;
+            pendingSeed = Long.MIN_VALUE;
+            pendingGenerateAtMillis = -1L;
+            generateMapForSeed(seedForGeneration);
+        }
+        updatePlayerMarker();
+    }
+
+    private void updatePlayerMarker() {
+        try {
+            MinecraftClient client = MinecraftClient.getInstance();
+            if (client == null || client.player == null) return;
+
+            // Find or create player marker
+            MapMarker playerMarker = null;
+            for (MapMarker marker : session.markers) {
+                if (marker.type == MapMarker.MarkerType.PLAYER) {
+                    playerMarker = marker;
+                    break;
+                }
+            }
+
+            int playerWorldX = (int) client.player.getX();
+            int playerWorldZ = (int) client.player.getZ();
+
+            if (playerMarker == null) {
+                playerMarker = new MapMarker(MapMarker.MarkerType.PLAYER, playerWorldX, playerWorldZ, "Player");
+                session.markers.add(playerMarker);
+            } else {
+                playerMarker.setPosition(playerWorldX, playerWorldZ);
+            }
+        } catch (Exception e) {
+            // Silently ignore player tracking errors
         }
     }
     
@@ -158,19 +263,38 @@ public class BlazeMapSeedScreen extends Screen {
     
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        // BlazeMap-style dark background
-        renderBackground(context, mouseX, mouseY, delta);
-        
-        // Render the main map
-        renderMap(context, mouseX, mouseY);
-        
-        // Render UI overlays
-        renderUI(context, mouseX, mouseY);
-        
-        // Render widgets
-        super.render(context, mouseX, mouseY, delta);
-        
-        // RENDER TEST SQUARES LAST - AFTER EVERYTHING ELSE
+        RenderMetrics metrics = RenderMetrics.get();
+        metrics.beginFrame();
+        long renderStart = System.nanoTime();
+
+        try {
+            // Force the standard tiled menu dirt background even when in-world.
+            Screen.renderBackgroundTexture(context, MENU_BACKGROUND_TEXTURE, 0, 0, 0.0F, 0.0F, width, height);
+            renderMap(context);
+            renderUI(context, mouseX, mouseY);
+            super.render(context, mouseX, mouseY, delta);
+            renderNavigationButtonIcon(context);
+            renderSettingsButtonIcon(context);
+
+            if (isNavigationMenuOpen) {
+                renderNavigationMenuLabels(context);
+            }
+        } finally {
+            metrics.addRenderNanos(System.nanoTime() - renderStart);
+            int chunkQueueDepth = mapCache != null ? mapCache.getPendingTaskCount() : 0;
+            int tileQueueDepth = tileRenderer != null ? tileRenderer.getPendingTileCount() : 0;
+            metrics.setQueueDepth(chunkQueueDepth + tileQueueDepth);
+            metrics.setTileCacheSize(tileRenderer != null ? tileRenderer.getCachedTileCount() : 0);
+            metrics.setChunkCacheSize(mapCache != null ? mapCache.getChunkCount(currentSeed) : 0);
+            metrics.endFrame();
+
+            if (metrics.shouldLogNow(5000)) {
+                String line = metrics.snapshot().toLogLine();
+                Cubeium.LOGGER.info("[CubeiumMetrics] {}", line);
+                // Print to stdout as well so metrics are visible in debug console even if logger filters INFO.
+                System.out.println("[CubeiumMetrics] " + line);
+            }
+        }
 
     }
     
@@ -178,74 +302,151 @@ public class BlazeMapSeedScreen extends Screen {
     
     @Override
     public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) {
-    // render debug logs removed
-        
-        // TEMPORARILY DISABLE ALL BACKGROUND LAYERS TO FIND TEST SQUARES
-        // Dark gray background - DISABLED
-        // context.fill(0, 0, width, height, 0xFF1A1A1A);
-        
-        // Map area border - DISABLED  
-        // context.fill(mapX - 2, mapY - 2, mapX + mapWidth + 2, mapY + mapHeight + 2, 0xFF2A2A2A);
-        
-    // render debug logs removed
+        Screen.renderBackgroundTexture(context, MENU_BACKGROUND_TEXTURE, 0, 0, 0.0F, 0.0F, width, height);
+    }
+
+    private void renderNavigationMenuLabels(DrawContext context) {
+        int panelLeft = travelOriginButton.getX() - 8;
+        int panelTop = travelOriginButton.getY() - 6;
+        int panelRight = travelGoButton.getX() + travelGoButton.getWidth() + 8;
+        int panelBottom = travelGoButton.getY() + travelGoButton.getHeight() + 6;
+
+        // Subtle panel background behind the menu controls.
+        context.fill(panelLeft, panelTop, panelRight, panelBottom, 0xD0222730);
+        context.drawBorder(panelLeft, panelTop, panelRight - panelLeft, panelBottom - panelTop, 0xFF5B6470);
+
+        String xLabel = "X:";
+        String zLabel = "Z:";
+        int xLabelY = travelXInput.getY() + 6;
+        int zLabelY = travelZInput.getY() + 6;
+        int xLabelX = travelXInput.getX() - textRenderer.getWidth(xLabel) - 6;
+        int zLabelX = travelZInput.getX() - textRenderer.getWidth(zLabel) - 6;
+
+        context.drawText(textRenderer, xLabel, xLabelX, xLabelY, 0xFFE0E0E0, false);
+        context.drawText(textRenderer, zLabel, zLabelX, zLabelY, 0xFFE0E0E0, false);
+    }
+
+    private void renderNavigationButtonIcon(DrawContext context) {
+        if (navigationMenuButton == null) {
+            return;
+        }
+
+        int iconSize = 12;
+        int iconX = navigationMenuButton.getX() + (navigationMenuButton.getWidth() - iconSize) / 2;
+        int iconY = navigationMenuButton.getY() + (navigationMenuButton.getHeight() - iconSize) / 2;
+
+        context.drawTexture(RenderLayer::getGuiTextured, NAVIGATION_ICON_TEXTURE,
+            iconX, iconY, 0.0F, 0.0F, iconSize, iconSize, iconSize, iconSize);
+    }
+
+    private void layoutNavigationMenuWidgets() {
+        if (navigationMenuButton == null || travelOriginButton == null || travelXInput == null
+            || travelZInput == null || travelGoButton == null) {
+            return;
+        }
+
+        int menuX = navigationMenuButton.getX();
+        int menuY = navigationMenuButton.getY() + navigationMenuButton.getHeight() + 4;
+
+        int originWidth = 190;
+        int fieldWidth = 82;
+        int fieldGap = 6;
+        int goWidth = 44;
+        int row2Y = menuY + 26;
+
+        travelOriginButton.setDimensionsAndPosition(originWidth, 20, menuX, menuY);
+        travelXInput.setX(menuX + 16);
+        travelXInput.setY(row2Y);
+        travelXInput.setWidth(fieldWidth);
+        travelXInput.setHeight(20);
+
+        travelZInput.setX(travelXInput.getX() + fieldWidth + fieldGap + 16);
+        travelZInput.setY(row2Y);
+        travelZInput.setWidth(fieldWidth);
+        travelZInput.setHeight(20);
+
+        travelGoButton.setDimensionsAndPosition(goWidth, 20, travelZInput.getX() + fieldWidth + fieldGap, row2Y);
+    }
+
+    private void toggleNavigationMenu() {
+        isNavigationMenuOpen = !isNavigationMenuOpen;
+        if (isNavigationMenuOpen) {
+            travelXInput.setText(Integer.toString(mapCenterX));
+            travelZInput.setText(Integer.toString(mapCenterZ));
+            setFocused(travelXInput);
+        } else {
+            setFocused(null);
+        }
+        syncNavigationMenuState();
+    }
+
+    private void syncNavigationMenuState() {
+        if (navigationMenuButton != null) {
+            navigationMenuButton.setMessage(Text.empty());
+        }
+        if (travelOriginButton != null) {
+            travelOriginButton.visible = isNavigationMenuOpen;
+            travelOriginButton.active = isNavigationMenuOpen;
+        }
+        if (travelXInput != null) {
+            travelXInput.visible = isNavigationMenuOpen;
+            travelXInput.active = isNavigationMenuOpen;
+        }
+        if (travelZInput != null) {
+            travelZInput.visible = isNavigationMenuOpen;
+            travelZInput.active = isNavigationMenuOpen;
+        }
+        if (travelGoButton != null) {
+            travelGoButton.visible = isNavigationMenuOpen;
+            travelGoButton.active = isNavigationMenuOpen;
+        }
+    }
+
+    private void travelToCoordinates() {
+        if (travelXInput == null || travelZInput == null) {
+            return;
+        }
+
+        try {
+            int x = Integer.parseInt(travelXInput.getText().trim());
+            int z = Integer.parseInt(travelZInput.getText().trim());
+            mapCenterX = x;
+            mapCenterZ = z;
+
+            if (mapGenerated && hasValidSeed && tileRenderer != null) {
+                tileRenderer.prewarmTiles(currentSeed, mapCenterX, mapCenterZ, mapWidth - 2, mapHeight - 2, zoomLevel);
+            }
+
+            isNavigationMenuOpen = false;
+            syncNavigationMenuState();
+            setFocused(null);
+        } catch (NumberFormatException ignored) {
+            // Keep menu open and ignore invalid values until user fixes input.
+        }
     }
     
     /**
      * Render the map using tile renderer like the working SeedMapScreen
      */
-    private void renderMap(DrawContext context, int mouseX, int mouseY) {
+    private void renderMap(DrawContext context) {
         // Map border
         context.drawBorder(mapX, mapY, mapWidth, mapHeight, 0xFF404040);
 
-        // CRITICAL FIX: Only render map tiles after user explicitly clicks Generate
-        // This prevents automatic rendering when world seed is loaded
         if (!mapGenerated || mapCache == null || tileRenderer == null) {
-            // TEMPORARILY DISABLE placeholder fill that might be covering test squares
-            // context.fill(mapX + 1, mapY + 1, mapX + mapWidth - 1, mapY + mapHeight - 1, 0xFF1a1a2e);
-            
-            String message = hasValidSeed ? "Click 'Generate' to render biomes" : "Enter a seed to start";
+            String message = hasValidSeed ? "Generating map..." : "Enter a seed to start";
             int messageWidth = textRenderer.getWidth(message);
             context.drawText(textRenderer, message, 
                 mapX + (mapWidth - messageWidth) / 2,
                 mapY + mapHeight / 2, 0xFFAAAAAA, false);
-            // render debug log removed
             return;
         }
         
-    // ADDITIONAL SAFETY: Only render if map cache has sufficient data
-    // Compute progress focused only on the visible viewport to avoid global world progress numbers
-    int viewWidthBlocks = (mapWidth - 2) * zoomLevel;
-    int viewHeightBlocks = (mapHeight - 2) * zoomLevel;
-    float progress = mapCache.getGenerationProgressForViewport(currentSeed, mapCenterX, mapCenterZ, viewWidthBlocks, viewHeightBlocks);
-        if (progress < 0.05f) { // Wait for at least 5% of data to be cached
-            // TEMPORARILY DISABLE loading screen fill that might be covering test squares
-            // context.fill(mapX + 1, mapY + 1, mapX + mapWidth - 1, mapY + mapHeight - 1, 0xFF1a1a2e);
-            
-            String message = String.format("Generating map data... %.0f%%", progress * 100);
-            int messageWidth = textRenderer.getWidth(message);
-            context.drawText(textRenderer, message, 
-                mapX + (mapWidth - messageWidth) / 2,
-                mapY + mapHeight / 2, 0xFFFFFFFF, false);
-            // render debug log removed
-            return;
-        }
-        
-        // TEMPORARY DEBUG: Bypass tile renderer and render directly from biome data
-            // debug bypass log removed
-        renderDirectBiomeMap(context, currentSeed, 
-                            mapX + 1, mapY + 1, mapWidth - 2, mapHeight - 2,
-                            mapCenterX, mapCenterZ, zoomLevel);
+        tileRenderer.renderMap(context, currentSeed,
+            mapX + 1, mapY + 1, mapWidth - 2, mapHeight - 2,
+            mapCenterX, mapCenterZ, zoomLevel);
         
     // Loading progress overlay removed per UI cleanup
         
-        // Show cache statistics (viewport-focused progress)
-        if (mapCache.hasCachedData(currentSeed)) {
-            String stats = String.format("Chunks: %d | Tiles: %d | Progress: %.0f%%", 
-                mapCache.getChunkCount(currentSeed),
-                tileRenderer.getCachedTileCount(),
-                progress * 100);
-            context.drawText(textRenderer, stats, mapX + 5, mapY + 5, 0xFF888888, true);
-        }
     }
     
     /**
@@ -255,81 +456,145 @@ public class BlazeMapSeedScreen extends Screen {
     // Title removed per UI cleanup
         
     // Current seed and zoom displays removed per UI cleanup
+
+        updateHoverSample(mouseX, mouseY);
         
-        // Mouse coordinates (BlazeMap precision)
-        if (showCoordinates && isMouseOverMap(mouseX, mouseY)) {
-            renderMouseCoordinates(context, mouseX, mouseY);
+        // Render map markers (before tooltips so markers appear under text)
+        if (markerRenderer != null && mapGenerated && hasValidSeed) {
+            markerRenderer.renderMarkers(context, session.markers, mapX, mapY, mapWidth, mapHeight,
+                                        mapCenterX, mapCenterZ, zoomLevel);
         }
         
-        // Controls help (BlazeMap-style)
-        renderControls(context);
-        
+        // Coordinate + biome info box — always shown in top-right corner of map
+        renderMapInfoBox(context);
+
+        // Floating tooltip near cursor when enabled in settings
+        if (session.showFloatingTooltip && isMouseOverMap(mouseX, mouseY)) {
+            renderFloatingTooltip(context, mouseX, mouseY);
+        }
+
         // Performance info
-        if (showPerformanceInfo) {
+        if (session.showPerformanceInfo) {
             renderPerformanceOverlay(context);
         }
     }
     
     /**
-     * Render mouse coordinates with fixed coordinate calculation
+     * Fixed top-right corner info box: biome swatch | biome name | X/Z coords.
+     * Always rendered; updates last-hovered values when the mouse is over the map.
      */
-    private void renderMouseCoordinates(DrawContext context, int mouseX, int mouseY) {
-        // FIXED: Use direct coordinate calculation like SeedMapScreen instead of broken scale calculation
-        int relX = mouseX - mapX - 1;
-        int relY = mouseY - mapY - 1;
-        
-        // Calculate world coordinates using SeedMapScreen's working approach
-        // Adjust for map center being in screen center
-        int mouseOffsetX = relX - mapWidth / 2;
-        int mouseOffsetY = relY - mapHeight / 2;
-        
-        // Convert screen pixels to world blocks using direct zoom level like SeedMapScreen
-        int worldX = mapCenterX + (mouseOffsetX * zoomLevel);
-        int worldZ = mapCenterZ + (mouseOffsetY * zoomLevel);
-        
-        String coordText = String.format("X: %d, Z: %d", worldX, worldZ);
-        int textWidth = textRenderer.getWidth(coordText);
-        
-        // Position near mouse with BlazeMap-style background
-        int tooltipX = mouseX + 10;
-        int tooltipY = mouseY - 10;
-        
-        // Keep tooltip on screen
-        if (tooltipX + textWidth > width) tooltipX = mouseX - textWidth - 10;
-        if (tooltipY < 0) tooltipY = mouseY + 20;
-        
-        // BlazeMap-style tooltip background
-        context.fill(tooltipX - 2, tooltipY - 2, tooltipX + textWidth + 2, tooltipY + 10, 0xE0000000);
-        context.drawText(textRenderer, coordText, tooltipX, tooltipY, 0xFFFFFF00, true);
+    private void renderMapInfoBox(DrawContext context) {
+        if (hoverSample.valid) {
+            lastInfoWorldX = hoverSample.worldX;
+            lastInfoWorldZ = hoverSample.worldZ;
+            lastInfoBiomeName = hoverSample.biomeName;
+            lastInfoBiomeColor = hoverSample.biomeColor;
+            hasInfoBoxData = true;
+        }
+
+        int swatchSize = 8;
+        int pad = 5;
+        int innerGap = 5;
+        int sectionGap = 12;
+        String biomeName = hasInfoBoxData ? lastInfoBiomeName : "-";
+        String coordText = hasInfoBoxData ? String.format("X: %d  Z: %d", lastInfoWorldX, lastInfoWorldZ) : "X: -  Z: -";
+        int biomeColor = lastInfoBiomeColor;
+
+        int contentWidth = swatchSize + innerGap + textRenderer.getWidth(biomeName) + sectionGap + textRenderer.getWidth(coordText);
+        int boxWidth = contentWidth + pad * 2;
+        int boxHeight = 9 + pad * 2;
+
+        int boxRight = mapX + mapWidth - 4;
+        int boxTop = mapY + 4;
+        int boxLeft = boxRight - boxWidth;
+
+        context.fill(boxLeft, boxTop, boxRight, boxTop + boxHeight, 0xD0111111);
+        context.drawBorder(boxLeft, boxTop, boxWidth, boxHeight, 0xFF404040);
+
+        int cx = boxLeft + pad;
+        int ty = boxTop + pad;
+
+        context.fill(cx, ty, cx + swatchSize, ty + swatchSize, biomeColor);
+        cx += swatchSize + innerGap;
+
+        context.drawText(textRenderer, biomeName, cx, ty, 0xFFE0E0E0, false);
+        cx += textRenderer.getWidth(biomeName) + sectionGap;
+
+        context.drawText(textRenderer, coordText, cx, ty, 0xFFFFFF66, false);
     }
     
-    /**
-     * Render controls help
-     */
-    private void renderControls(DrawContext context) {
-        String[] controls = {
-            "Mouse Drag: Pan map",
-            "Scroll: Zoom in/out", 
-            "Arrow Keys: Navigate",
-            "R: Reset view",
-            "C: Toggle coordinates",
-            "P: Toggle performance"
-        };
-        
-        int startY = mapY + 10;
-        for (int i = 0; i < controls.length; i++) {
-            context.drawText(textRenderer, controls[i], width - 150, startY + i * 12, 0xFF888888, false);
+    private void renderFloatingTooltip(DrawContext context, int mouseX, int mouseY) {
+        if (!hoverSample.valid) return;
+        String biomeName = hoverSample.biomeName;
+        int biomeColor = hoverSample.biomeColor;
+        String coordText = String.format("X: %d  Z: %d", hoverSample.worldX, hoverSample.worldZ);
+
+        int swatchSize = 8;
+        int pad = 4;
+        int innerGap = 4;
+        int sectionGap = 10;
+        int contentWidth = swatchSize + innerGap + textRenderer.getWidth(biomeName) + sectionGap + textRenderer.getWidth(coordText);
+        int boxWidth = contentWidth + pad * 2;
+        int boxHeight = 9 + pad * 2;
+
+        int tx = mouseX + 12;
+        int ty = mouseY - boxHeight - 4;
+        if (tx + boxWidth > width) tx = mouseX - boxWidth - 12;
+        if (ty < 0) ty = mouseY + 12;
+
+        context.fill(tx, ty, tx + boxWidth, ty + boxHeight, 0xEE000000);
+        context.drawBorder(tx, ty, boxWidth, boxHeight, 0xFF606060);
+
+        int cx = tx + pad;
+        int textY = ty + pad;
+        context.fill(cx, textY, cx + swatchSize, textY + swatchSize, biomeColor);
+        cx += swatchSize + innerGap;
+        context.drawText(textRenderer, biomeName, cx, textY, 0xFFE0E0E0, false);
+        cx += textRenderer.getWidth(biomeName) + sectionGap;
+        context.drawText(textRenderer, coordText, cx, textY, 0xFFFFFF66, false);
+    }
+
+    private void renderSettingsButtonIcon(DrawContext context) {
+        if (settingsButton == null) return;
+        int iconSize = 12;
+        int iconX = settingsButton.getX() + (settingsButton.getWidth() - iconSize) / 2;
+        int iconY = settingsButton.getY() + (settingsButton.getHeight() - iconSize) / 2;
+        context.drawTexture(RenderLayer::getGuiTextured, SETTINGS_ICON_TEXTURE,
+            iconX, iconY, 0.0F, 0.0F, iconSize, iconSize, iconSize, iconSize);
+    }
+
+    private void openSettings() {
+        if (client != null) {
+            client.setScreen(new BlazeMapSettingsScreen(this, session));
         }
     }
-    
+
     /**
      * Render performance overlay
      */
     private void renderPerformanceOverlay(DrawContext context) {
+        RenderMetrics.Snapshot snapshot = RenderMetrics.get().snapshot();
+
+        context.drawText(textRenderer, "CubeiumMetrics", mapX + 5, mapY + mapHeight - 63, 0xFFFFFF00, true);
+
         String perf = String.format("Center: %d, %d | View: %dx%d blocks", 
                                    mapCenterX, mapCenterZ, 
                                    mapWidth * zoomLevel, mapHeight * zoomLevel);
         context.drawText(textRenderer, perf, mapX + 5, mapY + mapHeight - 15, 0xFF00FF00, true);
+
+        String perf2 = String.format("Frame: %.2fms | Render: %.2fms | FPS~%.1f", 
+                                    snapshot.avgFrameMs, snapshot.avgRenderMs, snapshot.fpsEstimate);
+        context.drawText(textRenderer, perf2, mapX + 5, mapY + mapHeight - 27, 0xFF66FF66, true);
+
+        String perf3 = String.format("Tiles f/t: %d/%d | Hit: %.1f%% | Queue: %d",
+                                    snapshot.tilesLastFrame, snapshot.tilesTotal,
+                                    snapshot.tileCacheHitRate, snapshot.queueDepth);
+        context.drawText(textRenderer, perf3, mapX + 5, mapY + mapHeight - 39, 0xFF66FFFF, true);
+
+        String perf4 = String.format("TileGen: %.2fms avg (%d) | JNI: %.3fms avg (%d)",
+                                    snapshot.avgTileGenerationMs, snapshot.tileGenerations,
+                                    snapshot.avgJniMs, snapshot.jniCalls);
+        context.drawText(textRenderer, perf4, mapX + 5, mapY + mapHeight - 51, 0xFFFFFF99, true);
     }
     
     /**
@@ -339,57 +604,66 @@ public class BlazeMapSeedScreen extends Screen {
         return mouseX >= mapX && mouseX < mapX + mapWidth &&
                mouseY >= mapY && mouseY < mapY + mapHeight;
     }
-    
-    /**
-     * Generate map for current seed using working approach
-     */
-    private void generateMap() {
-        if (mapCache == null) {
-            // map cache null log removed
+
+    private boolean isMouseOverMapInner(int mouseX, int mouseY) {
+        return mouseX >= mapX + 1 && mouseX < mapX + mapWidth - 1 &&
+               mouseY >= mapY + 1 && mouseY < mapY + mapHeight - 1;
+    }
+
+    private void updateHoverSample(int mouseX, int mouseY) {
+        hoverSample.valid = false;
+        if (!mapGenerated || !hasValidSeed || session.biomeGenerator == null || !isMouseOverMapInner(mouseX, mouseY)) {
             return;
         }
-        
-        // Get the current seed from the input widget
-        long tempSeed;
-        if (seedInput != null && !seedInput.getText().isEmpty()) {
-            try {
-                String seedText = seedInput.getText().trim();
-                if (seedText.toLowerCase().startsWith("0x")) {
-                    tempSeed = Long.parseUnsignedLong(seedText.substring(2), 16);
-                } else {
-                    tempSeed = Long.parseLong(seedText);
-                }
-            } catch (NumberFormatException e) {
-                // Treat as string seed - hash it
-                tempSeed = (long) seedInput.getText().trim().hashCode();
-            }
+
+        int innerWidth = mapWidth - 2;
+        int innerHeight = mapHeight - 2;
+        int relX = mouseX - (mapX + 1);
+        int relY = mouseY - (mapY + 1);
+
+        int viewWorldLeft = mapCenterX - (innerWidth * zoomLevel) / 2;
+        int viewWorldTop = mapCenterZ - (innerHeight * zoomLevel) / 2;
+        int worldX = viewWorldLeft + relX * zoomLevel;
+        int worldZ = viewWorldTop + relY * zoomLevel;
+
+        Integer renderedBiomeId = tileRenderer != null
+            ? tileRenderer.sampleBiomeAtScreen(
+                currentSeed,
+                mapX + 1, mapY + 1, innerWidth, innerHeight,
+                mapCenterX, mapCenterZ, zoomLevel,
+                mouseX, mouseY)
+            : null;
+
+        int biomeId;
+        if (renderedBiomeId != null) {
+            biomeId = renderedBiomeId;
         } else {
-            tempSeed = currentSeed;
+            // Fallback when this pixel is still on placeholder/no tile data.
+            session.biomeGenerator.setSeed(currentSeed, 0);
+            biomeId = session.biomeGenerator.getBiomeAt(worldX, worldZ);
         }
-        
-        final long seedToUse = tempSeed;
-        
+
+        hoverSample.worldX = worldX;
+        hoverSample.worldZ = worldZ;
+        hoverSample.biomeName = session.biomeGenerator.getBiomeName(biomeId);
+        hoverSample.biomeColor = MapTileRenderer.getBiomeColor(biomeId);
+        hoverSample.valid = true;
+    }
+    
+    private void generateMapForSeed(long seedToUse) {
+        if (mapCache == null) {
+            return;
+        }
+
         // Update current seed to match what we're actually using
         this.currentSeed = seedToUse;
         this.hasValidSeed = true;
-        this.mapGenerated = true; // FIXED: Set flag to allow rendering
-
-        // Reset map center to origin (0, 0) when generating new map like SeedMapScreen
-        this.mapCenterX = 0;
-        this.mapCenterZ = 0;
+        this.mapGenerated = true;
+        this.lastGeneratedSeed = seedToUse;
         if (tileRenderer != null) {
             tileRenderer.clearCache();
         }
-        
-    // map generation started log removed
-        
-        // Start progressive generation - this returns immediately and loads in background
-        mapCache.generateMapAsync(seedToUse).thenRun(() -> {
-            // map generation completed log removed
-        }).exceptionally(throwable -> {
-            // map generation failed log removed
-            return null;
-        });
+
         // Start viewport-prioritized generation: pass view size in blocks
         int viewWidthBlocks = Math.max(1, (mapWidth - 2) * zoomLevel);
         int viewHeightBlocks = Math.max(1, (mapHeight - 2) * zoomLevel);
@@ -418,15 +692,10 @@ public class BlazeMapSeedScreen extends Screen {
         mapCenterX = 0;
         mapCenterZ = 0;
         zoomLevel = 4; // Reset to default 4 blocks per pixel
-        // Clear map generated flag to prevent rendering until Generate is clicked
-        mapGenerated = false;
-    }
-    
-    /**
-     * Update scale from zoom level (removed - not needed for SeedMapScreen compatibility)
-     */
-    private void updateScale() {
-        // No longer needed - SeedMapScreen doesn't use scale
+
+        if (mapGenerated && hasValidSeed && tileRenderer != null) {
+            tileRenderer.prewarmTiles(currentSeed, mapCenterX, mapCenterZ, mapWidth - 2, mapHeight - 2, zoomLevel);
+        }
     }
     
     @Override
@@ -451,15 +720,6 @@ public class BlazeMapSeedScreen extends Screen {
                 return true;
             case 265: // Up arrow
                 mapCenterZ -= moveDistance;
-                return true;
-            case 82: // R key - reset view
-                resetView();
-                return true;
-            case 67: // C key - toggle coordinates
-                showCoordinates = !showCoordinates;
-                return true;
-            case 80: // P key - toggle performance
-                showPerformanceInfo = !showPerformanceInfo;
                 return true;
             case 256: // Escape
                 close();
@@ -526,192 +786,62 @@ public class BlazeMapSeedScreen extends Screen {
     
     @Override
     public void close() {
-    // closing log removed
-        // Clean up resources when closing the screen
-        if (mapCache != null) {
-            // shutdown log removed
-            mapCache.shutdown();
+        if (markerRenderer != null) {
+            markerRenderer.shutdown();
         }
+        saveSessionState();
         super.close();
     }
-    
-    /**
-     * ENHANCED DEBUG METHOD: Render biomes using BufferBuilder system
-     */
-    private void renderDirectBiomeMap(DrawContext context, long seed, 
-                                     int startX, int startY, int width, int height,
-                                     int centerX, int centerZ, int blocksPerPixel) {
-    // biome render debug logs removed
-        
-        // Get biome data for the visible map area using the same coordinate system
-        int mapPixelWidth = mapWidth - 2; // Subtract border
-        int mapPixelHeight = mapHeight - 2; // Subtract border
-        
-        try {
-            // Use MapCache to get biome data for the current view
-            int[] biomeData = mapCache.getBiomeArea(currentSeed, mapCenterX, mapCenterZ, 
-                                                   mapPixelWidth, mapPixelHeight, zoomLevel);
-            
-            if (biomeData != null && biomeData.length > 0) {
-                // biome data debug logs removed
-                
-                // Render each pixel using the biome data
-                for (int pixelY = 0; pixelY < mapPixelHeight && pixelY < biomeData.length / mapPixelWidth; pixelY++) {
-                    for (int pixelX = 0; pixelX < mapPixelWidth && (pixelY * mapPixelWidth + pixelX) < biomeData.length; pixelX++) {
-                        int biomeId = biomeData[pixelY * mapPixelWidth + pixelX];
-                        int biomeColor = getBiomeColor(biomeId);
-                        
-                        // Draw pixel at screen coordinates (inside map border)
-                        int screenX = mapX + 1 + pixelX;
-                        int screenY = mapY + 1 + pixelY;
-                        
-                        // Draw a small pixel (1x1)
-                        context.fill(screenX, screenY, screenX + 1, screenY + 1, biomeColor);
-                    }
-                }
-                
-                // biome render finished log removed
-                
-                // Sample a few biomes for debugging
-                if (biomeData.length > 0) {
-                    // center biome sample removed
-                }
-                
-            } else {
-                // no biome data placeholder log removed
-                // Neutral loading placeholder while biome data is generating
-                context.fill(mapX + 10, mapY + 10, mapX + Math.min(mapX + 200, mapX + mapWidth - 10), mapY + 40, 0xFF2A2A2A);
-                context.drawText(textRenderer, "Loading biome data...", mapX + 15, mapY + 16, 0xFFCCCCCC, false);
-            }
-            
-        } catch (Exception e) {
-            // biome data error logging removed
-            
-            // Error fallback - red error square
-            context.fill(mapX + 10, mapY + 10, mapX + 50, mapY + 50, 0xFFFF0000);
+
+    private static SeedMapSession getOrCreateSession() {
+        if (sharedSession == null) {
+            sharedSession = new SeedMapSession();
+        }
+        return sharedSession;
+    }
+
+    private void saveSessionState() {
+        session.currentSeed = currentSeed;
+        session.hasValidSeed = hasValidSeed;
+        session.mapGenerated = mapGenerated;
+        session.mapCenterX = mapCenterX;
+        session.mapCenterZ = mapCenterZ;
+        session.zoomLevel = zoomLevel;
+        session.lastGeneratedSeed = lastGeneratedSeed;
+        if (seedInput != null) {
+            session.seedInputText = seedInput.getText();
         }
     }
-    
-    // drawQuad removed (not used)
-    
-    /**
-     * ENHANCED DEBUG METHOD: Biome to color mapping with brighter colors
-     */
-    private int getBiomeColor(int biomeId) {
-        // Using Amidst color scheme for accurate biome visualization
-        switch (biomeId) {
-            // Basic biomes
-            case 0: return 0xFF000070; // Ocean - dark blue (0,0,112)
-            case 1: return 0xFF8DB360; // Plains - olive green (141,179,96)
-            case 2: return 0xFFFA9418; // Desert - orange (250,148,24)
-            case 3: return 0xFF606060; // Mountains - gray (96,96,96)
-            case 4: return 0xFF056621; // Forest - dark green (5,102,33)
-            case 5: return 0xFF0B6A5F; // Taiga - custom teal (11,106,95)
-            case 6: return 0xFF07F9B2; // Swamp - cyan (7,249,178)
-            case 7: return 0xFF0000FF; // River - bright blue (0,0,255)
-            case 8: return 0xFFFF0000; // Nether Wastes - red (255,0,0)
-            case 9: return 0xFF8080FF; // End - light blue (128,128,255)
-            case 10: return 0xFF7070D6; // Frozen Ocean - purple-blue (112,112,214)
-            case 11: return 0xFFA0A0FF; // Frozen River - light purple (160,160,255)
-            case 12: return 0xFFE0E0E0; // Snowy Plains (Snowy Tundra) - light gray (224,224,224)
-            case 13: return 0xFFA0A0A0; // Snowy Mountains - light gray (160,160,160)
-            case 14: return 0xFFFF00FF; // Mushroom Fields - magenta (255,0,255)
-            case 15: return 0xFFA000FF; // Mushroom Field Shore - purple (160,0,255)
-            case 16: return 0xFFFFDE55; // Beach - yellow (255,222,85)
-            case 17: return 0xFFD25F12; // Desert Hills - brown (210,95,18)
-            case 18: return 0xFF22551C; // Wooded Hills - dark green (34,85,28)
-            case 19: return 0xFF163933; // Taiga Hills - dark teal (22,57,51)
-            case 20: return 0xFF72789A; // Mountain Edge - blue-gray (114,120,154)
-            case 21: return 0xFF537B09; // Jungle - jungle green (83,123,9)
-            case 22: return 0xFF2C4205; // Jungle Hills - darker jungle (44,66,5)
-            case 23: return 0xFF628B17; // Jungle Edge - lighter jungle (98,139,23)
-            case 24: return 0xFF000030; // Deep Ocean - very dark blue (0,0,48)
-            case 25: return 0xFFA2A284; // Stone Shore - beige-gray (162,162,132)
-            case 26: return 0xFFFAF0C0; // Snowy Beach - light beige (250,240,192)
-            case 27: return 0xFF307444; // Birch Forest - green (48,116,68)
-            case 28: return 0xFF1F0532; // Birch Forest Hills - dark purple (31,5,50)
-            case 29: return 0xFF40511A; // Dark Forest - dark olive (64,81,26)
-            case 30: return 0xFF31554A; // Snowy Taiga - dark green-blue (49,85,74)
-            case 31: return 0xFF243F36; // Snowy Taiga Hills - darker teal (36,63,54)
-            case 32: return 0xFF596651; // Giant Tree Taiga - brown-green (89,102,81)
-            case 33: return 0xFF45073E; // Giant Tree Taiga Hills - dark purple (69,7,62)
-            case 34: return 0xFF507050; // Wooded Mountains - green-gray (80,112,80)
-            case 35: return 0xFFBDB25F; // Savanna - custom olive-tan (189,178,95)
-            case 36: return 0xFFA79D64; // Savanna Plateau - brown (167,157,100)
-            case 37: return 0xFFD94515; // Badlands - orange-red (217,69,21)
-            case 38: return 0xFFB09765; // Wooded Badlands Plateau - tan (176,151,101)
-            case 39: return 0xFFCA8C65; // Badlands Plateau - tan (202,140,101)
 
-            // Rare biomes  
-            case 40: case 41: case 42: case 43: return 0xFF8080FF; // Sky biomes - light blue (128,128,255)
+    public static final class SeedMapSession {
+        final BiomeGenerator biomeGenerator;
+        final MapCache mapCache;
+        final MapTileRenderer tileRenderer;
+        final java.util.List<MapMarker> markers = new java.util.concurrent.CopyOnWriteArrayList<>();
 
-            // Ocean variants
-            case 44: return 0xFF0000AC; // Warm Ocean - blue (0,0,172)
-            case 45: return 0xFF000090; // Lukewarm Ocean - darker blue (0,0,144)
-            case 46: return 0xFF202070; // Cold Ocean - purple-blue (32,32,112)
-            case 47: return 0xFF000050; // Deep Warm Ocean - dark blue (0,0,80)
-            case 48: return 0xFF000040; // Deep Lukewarm Ocean - darker (0,0,64)
-            case 49: return 0xFF202038; // Deep Cold Ocean - dark purple (32,32,56)
-            case 50: return 0xFF404090; // Deep Frozen Ocean - blue-gray (64,64,144)
+        long currentSeed = 0L;
+        boolean hasValidSeed = false;
+        boolean mapGenerated = false;
+        int mapCenterX = 0;
+        int mapCenterZ = 0;
+        int zoomLevel = 4;
+        long lastGeneratedSeed = Long.MIN_VALUE;
+        boolean showPerformanceInfo = false;
+        boolean showFloatingTooltip = false;
+        String seedInputText = "";
 
-            // Special/Unknown
-            case 127: return 0xFF000000; // Void - black (0,0,0)
-
-            // Hills variants (128+)
-            case 129: return 0xFFB5DB88; // Sunflower Plains - light green (181,219,136)
-            case 130: return 0xFFFFBC40; // Desert Lakes - light orange (255,188,64)
-            case 131: return 0xFF888888; // Gravelly Mountains - gray (136,136,136)
-            case 132: return 0xFF2D8E49; // Flower Forest - bright green (45,142,73)
-            case 133: return 0xFF338E13; // Taiga Mountains - green (51,142,19)
-            case 134: return 0xFF2FFF12; // Swamp Hills - bright green (47,255,18)
-
-            // Other variants
-            case 140: return 0xFFB4DCDC; // Ice Spikes - light cyan (180,220,220)
-            case 149: return 0xFF7B0D31; // Modified Jungle - dark red (123,13,49)
-            case 151: return 0xFF8AB33F; // Modified Jungle Edge - olive (138,179,63)
-            case 155: return 0xFF589C6C; // Modified Birch Forest - teal (88,156,108)
-            case 156: return 0xFF470F5A; // Modified Birch Forest Hills - purple (71,15,90)
-            case 157: return 0xFF687942; // Tall Birch Forest - olive (104,121,66)
-            case 158: return 0xFF597D72; // Tall Birch Hills - gray-green (89,125,114)
-            case 160: return 0xFF818E79; // Modified Gravelly Mountains - gray-green (129,142,121)
-            case 161: return 0xFF6D7766; // Modified Wooded Badlands - gray (109,119,102)
-            case 162: return 0xFF783478; // Modified Badlands Plateau - purple (120,52,120)
-            case 163: return 0xFFE5DA87; // Windswept Savanna (Shattered Savanna) - light yellow (229,218,135)
-            case 165: return 0xFFFF6D3D; // Eroded Badlands - orange (255,109,61)
-            // 1.14 biomes
-            case 168: return 0xFF849500; // Bamboo Jungle - olive green (132,149,0)
-            case 169: return 0xFFCFC58C; // Bamboo Jungle Hills - tan (207,197,140)
-            
-            // 1.16 Nether biomes
-            case 170: return 0xFFFF6D3D; // Soul Sand Valley - orange (255,109,61)
-            case 171: return 0xFFD8BF8D; // Crimson Forest - tan (216,191,141)
-            case 172: return 0xFFF2B48D; // Warped Forest - light tan (242,180,141)
-            case 173: return 0xFF768E14; // Basalt Deltas - olive (118,142,20)
-            
-            // 1.17 biomes
-            case 174: return 0xFF3B470A; // Dripstone Caves - dark olive (59,71,10)
-            case 175: return 0xFF522921; // Lush Caves - brown (82,41,33)
-            
-            // 1.18 biomes
-            case 177: return 0xFF60A445; // Meadow - custom green (96,164,69)
-            case 178: return 0xFF47726C; // Grove - custom gray-green (71,114,108)
-            case 179: return 0xFFC4C4C4; // Snowy Slopes - custom light gray (196,196,196)
-            case 180: return 0xFFDCDCC8; // Jagged Peaks - custom light gray (220,220,200)
-            case 181: return 0xFFB0B3CE; // Frozen Peaks - custom light blue-gray (176,179,206)
-            case 182: return 0xFF7B8F74; // Stony Peaks - custom green-gray (123,143,116)
-            
-            // 1.19 biomes
-            case 183: return 0xFFDD0808; // Deep Dark - dark red (221,8,8)
-            case 184: return 0xFF2CCC8E; // Mangrove Swamp - custom teal (44,204,142)
-            
-            // 1.20 biomes
-            case 185: return 0xFFFF91C8; // Cherry Grove - custom pink (255,145,200)
-            
-            // 1.21 biomes
-            case 186: return 0xFF696D95; // Pale Garden - custom blue-gray (105,109,149)
-            
-            // Fallback
-            default: return 0xFFFF00FF; // Unknown - bright magenta
+        SeedMapSession() {
+            biomeGenerator = new BiomeGenerator();
+            mapCache = new MapCache(biomeGenerator);
+            tileRenderer = new MapTileRenderer(mapCache);
         }
+    }
+
+    private static final class HoverSample {
+        int worldX;
+        int worldZ;
+        String biomeName = "";
+        int biomeColor = 0xFF888888;
+        boolean valid;
     }
 }
