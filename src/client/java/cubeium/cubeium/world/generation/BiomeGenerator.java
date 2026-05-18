@@ -1,13 +1,15 @@
 package cubeium.cubeium.world.generation;
 
-import cubeium.cubeium.world.CubiomesInterface;
-
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import cubeium.cubeium.util.RenderMetrics;
+import cubeium.cubeium.world.CubiomesInterface;
 
 /**
  * Manages biome generation using the cubiomes library integration.
@@ -127,7 +129,9 @@ public class BiomeGenerator {
             try {
                 // Use scale = 4 for biome coordinates (standard for most biome maps)
                 // This matches what most cubiomes-based websites use
+                long jniStart = System.nanoTime();
                 int biomeId = CubiomesInterface.getBiomeAt(generatorHandle, 4, x, y, z);
+                RenderMetrics.get().recordJniCallNanos(System.nanoTime() - jniStart);
                 
                 // Debug logging for specific coordinates that we see in UI logs
                 if ((x >= -5 && x <= 5) && (z >= -5 && z <= 5)) {
@@ -184,7 +188,9 @@ public class BiomeGenerator {
         int[] biomes;
         synchronized (generatorLock) {
             try {
+                long jniStart = System.nanoTime();
                 biomes = CubiomesInterface.genBiomes(generatorHandle, scale, scaledX, scaledZ, 64, scaledWidth, scaledHeight);
+                RenderMetrics.get().recordJniCallNanos(System.nanoTime() - jniStart);
             } catch (Exception e) {
                 throw new RuntimeException("Failed to generate biomes for region: " + e.getMessage(), e);
             }
@@ -237,10 +243,46 @@ public class BiomeGenerator {
      */
     public String getBiomeName(int biomeId) {
         try {
-            return CubiomesInterface.getBiomeName(biomeId);
+            return normalizeBiomeName(CubiomesInterface.getBiomeName(biomeId));
         } catch (Exception e) {
             return "Unknown Biome (" + biomeId + ")";
         }
+    }
+
+    private String normalizeBiomeName(String rawBiomeName) {
+        if (rawBiomeName == null || rawBiomeName.isBlank()) {
+            return "Unknown Biome";
+        }
+
+        String normalized = rawBiomeName.trim();
+
+        int namespaceSeparator = normalized.lastIndexOf(':');
+        if (namespaceSeparator >= 0 && namespaceSeparator < normalized.length() - 1) {
+            normalized = normalized.substring(namespaceSeparator + 1);
+        }
+
+        normalized = normalized.replace('_', ' ').replace('-', ' ');
+        String[] words = normalized.split("\\s+");
+        StringBuilder titleCase = new StringBuilder(normalized.length());
+
+        for (String word : words) {
+            if (word.isEmpty()) {
+                continue;
+            }
+
+            if (!titleCase.isEmpty()) {
+                titleCase.append(' ');
+            }
+
+            if (word.length() == 1) {
+                titleCase.append(Character.toUpperCase(word.charAt(0)));
+            } else {
+                titleCase.append(Character.toUpperCase(word.charAt(0)));
+                titleCase.append(word.substring(1).toLowerCase(Locale.ROOT));
+            }
+        }
+
+        return titleCase.isEmpty() ? "Unknown Biome" : titleCase.toString();
     }
     
     /**

@@ -16,6 +16,7 @@ public class MapCache {
     
     // Cache structure: seed -> coordinate -> biome data
     private final Map<Long, Map<ChunkCoord, int[]>> seedCaches = new ConcurrentHashMap<>();
+    private final Map<Long, Map<ChunkCoord, Long>> seedAccessTimes = new ConcurrentHashMap<>();
     private final Map<Long, CompletableFuture<Void>> generationTasks = new ConcurrentHashMap<>();
     
     // Current generation state
@@ -41,6 +42,9 @@ public class MapCache {
     // Constants
     private static final int CHUNK_SIZE = 64; // 64x64 blocks per chunk
     private static final int MAX_RADIUS = 100; // Maximum chunks from center
+    private static final int MAX_CHUNKS_PER_SEED = 12000;
+    private static final int TARGET_CHUNKS_PER_SEED = 11000;
+    private static final int CHUNK_BYTES = CHUNK_SIZE * CHUNK_SIZE * Integer.BYTES;
     
     public MapCache(BiomeGenerator biomeGenerator) {
         this.biomeGenerator = biomeGenerator;
@@ -57,7 +61,7 @@ public class MapCache {
                             // Only execute if generation is active and seed matches
                             if (!isGenerating) continue;
                             if (task.seed != currentSeed) continue;
-                            generateChunk(seedCaches.get(task.seed), task.chunkX, task.chunkZ);
+                            generateChunk(task.seed, seedCaches.get(task.seed), task.chunkX, task.chunkZ);
                         } catch (InterruptedException e) {
                             // Thread interrupted - exit if we are shutting down
                             Thread.currentThread().interrupt();
@@ -155,6 +159,7 @@ public class MapCache {
 
         // Create cache for this seed if it doesn't exist
         seedCaches.computeIfAbsent(seed, k -> new ConcurrentHashMap<>());
+        seedAccessTimes.computeIfAbsent(seed, k -> new ConcurrentHashMap<>());
 
         // Ensure BiomeGenerator seed is set once for this generation
         try {
@@ -227,15 +232,22 @@ public class MapCache {
     /**
      * Generate a single chunk (64x64 blocks)
      */
-    private void generateChunk(Map<ChunkCoord, int[]> cache, int chunkX, int chunkZ) {
+    private void generateChunk(long seed, Map<ChunkCoord, int[]> cache, int chunkX, int chunkZ) {
+        if (cache == null) {
+            return;
+        }
+
         ChunkCoord coord = new ChunkCoord(chunkX, chunkZ);
         
         // Skip if already cached
-        if (cache.containsKey(coord)) return;
+        if (cache.containsKey(coord)) {
+            touchChunkAccess(seed, coord);
+            return;
+        }
         
         int[] chunkData = generateChunkData(chunkX, chunkZ);
         if (chunkData != null) {
-            cache.put(coord, chunkData);
+            putChunkWithEviction(seed, cache, coord, chunkData);
         }
     }
     
@@ -244,19 +256,29 @@ public class MapCache {
      */
     private int[] generateChunkData(int chunkX, int chunkZ) {
         int[] chunkData = new int[CHUNK_SIZE * CHUNK_SIZE];
-        // Optimize: biome coordinates change every 4 blocks (>>2). Sample per biome cell (4x4 blocks)
-        final int BIOME_SCALE = 4;
-        int cells = CHUNK_SIZE / BIOME_SCALE; // CHUNK_SIZE assumed divisible by 4
+        final int BIOME_SCALE = 4;  // Biomes change every 4 blocks
+        
         try {
+            // Phase 3: Use bulk generateBiomes() instead of per-point getBiomeAt() calls.
+            // This single call replaces 256 (16x16) JNI calls per chunk, dramatically reducing
+            // lock contention and improving throughput.
+            int worldX = chunkX * CHUNK_SIZE;
+            int worldZ = chunkZ * CHUNK_SIZE;
+            BiomeGenerator.BiomeRegion region = biomeGenerator.generateBiomes(
+                worldX, worldZ, CHUNK_SIZE, CHUNK_SIZE, BIOME_SCALE
+            );
+            
+            if (region == null || region.biomes == null) {
+                return null;
+            }
+            
+            // Upscale each biome cell (4x4 block area) to fill the full chunk array
+            int cells = CHUNK_SIZE / BIOME_SCALE;
             for (int cellZ = 0; cellZ < cells; cellZ++) {
                 for (int cellX = 0; cellX < cells; cellX++) {
-                    int worldX = chunkX * CHUNK_SIZE + cellX * BIOME_SCALE;
-                    int worldZ = chunkZ * CHUNK_SIZE + cellZ * BIOME_SCALE;
-                    int biomeX = worldX >> 2;
-                    int biomeZ = worldZ >> 2;
-                    int biomeId = biomeGenerator.getBiomeAt(biomeX, 64, biomeZ);
-
-                    // Fill the 4x4 block for this biome cell
+                    int biomeId = region.biomes[cellZ * cells + cellX];
+                    
+                    // Fill the 4x4 block region for this biome cell
                     int baseX = cellX * BIOME_SCALE;
                     int baseZ = cellZ * BIOME_SCALE;
                     for (int lz = 0; lz < BIOME_SCALE; lz++) {
@@ -267,6 +289,7 @@ public class MapCache {
                     }
                 }
             }
+            
             return chunkData;
         } catch (Exception e) {
             System.err.println("[MapCache] Error generating chunk (" + chunkX + "," + chunkZ + "): " + e.getMessage());
@@ -285,6 +308,7 @@ public class MapCache {
             cache = new ConcurrentHashMap<>();
             seedCaches.put(seed, cache);
         }
+        seedAccessTimes.computeIfAbsent(seed, k -> new ConcurrentHashMap<>());
         
         //System.out.println("[MapCache] Cache found for seed: " + seed + " with " + cache.size() + " chunks");
         
@@ -313,7 +337,11 @@ public class MapCache {
                 if (chunkData == null) {
                     // Generate chunk on-demand (synchronous fallback)
                     chunkData = generateChunkData(chunkX, chunkZ);
-                    if (chunkData != null) cache.put(coord, chunkData);
+                    if (chunkData != null) {
+                        putChunkWithEviction(seed, cache, coord, chunkData);
+                    }
+                } else {
+                    touchChunkAccess(seed, coord);
                 }
                 
                 if (chunkData != null) {
@@ -328,15 +356,8 @@ public class MapCache {
                     int biomeId = chunkData[localZ * CHUNK_SIZE + localX];
                     result[pixelZ * width + pixelX] = biomeId;
                 } else {
-                    // Fallback to direct biome generation
-                    try {
-                        int biomeX = worldX >> 2;
-                        int biomeZ = worldZ >> 2;
-                        int biomeId = biomeGenerator.getBiomeAt(biomeX, 64, biomeZ);
-                        result[pixelZ * width + pixelX] = biomeId;
-                    } catch (Exception e) {
-                        result[pixelZ * width + pixelX] = 0;
-                    }
+                    // Phase 3: bulk generation in generateChunkData should now handle all cases
+                    result[pixelZ * width + pixelX] = 0; // Fallback to ocean if generation fails
                 }
             }
         }
@@ -404,6 +425,13 @@ public class MapCache {
         Map<ChunkCoord, int[]> cache = seedCaches.get(seed);
         return cache != null ? cache.size() : 0;
     }
+
+    /**
+     * Get current pending generation tasks in the queue.
+     */
+    public int getPendingTaskCount() {
+        return taskQueue.size();
+    }
     
     /**
      * Cancel current generation
@@ -423,6 +451,7 @@ public class MapCache {
     public void clearSeed(long seed) {
         cancelGeneration();
         seedCaches.remove(seed);
+        seedAccessTimes.remove(seed);
         generationTasks.remove(seed);
         System.out.println("[MapCache] Cleared cache for seed: " + seed);
     }
@@ -433,6 +462,7 @@ public class MapCache {
     public void clearAll() {
         cancelGeneration();
         seedCaches.clear();
+        seedAccessTimes.clear();
         generationTasks.clear();
         System.out.println("[MapCache] Cleared all cached data");
     }
@@ -444,9 +474,49 @@ public class MapCache {
         int totalChunks = seedCaches.values().stream()
                 .mapToInt(Map::size)
                 .sum();
+        double chunkCacheMb = (totalChunks * (double) CHUNK_BYTES) / (1024.0 * 1024.0);
         
-        return String.format("Seeds: %d, Chunks: %d, Generating: %s", 
-                seedCaches.size(), totalChunks, isGenerating);
+        return String.format("Seeds: %d, Chunks: %d (~%.1f MB), cap/seed=%d, Generating: %s",
+                seedCaches.size(), totalChunks, chunkCacheMb, MAX_CHUNKS_PER_SEED, isGenerating);
+    }
+
+    private void putChunkWithEviction(long seed, Map<ChunkCoord, int[]> cache, ChunkCoord coord, int[] chunkData) {
+        int[] existing = cache.putIfAbsent(coord, chunkData);
+        if (existing == null) {
+            touchChunkAccess(seed, coord);
+            enforceSeedCacheBounds(seed, cache);
+        } else {
+            touchChunkAccess(seed, coord);
+        }
+    }
+
+    private void touchChunkAccess(long seed, ChunkCoord coord) {
+        Map<ChunkCoord, Long> accessTimes = seedAccessTimes.computeIfAbsent(seed, k -> new ConcurrentHashMap<>());
+        accessTimes.put(coord, System.currentTimeMillis());
+    }
+
+    private void enforceSeedCacheBounds(long seed, Map<ChunkCoord, int[]> cache) {
+        if (cache.size() <= MAX_CHUNKS_PER_SEED) {
+            return;
+        }
+
+        Map<ChunkCoord, Long> accessTimes = seedAccessTimes.computeIfAbsent(seed, k -> new ConcurrentHashMap<>());
+        synchronized (accessTimes) {
+            if (cache.size() <= MAX_CHUNKS_PER_SEED) {
+                return;
+            }
+
+            List<Map.Entry<ChunkCoord, Long>> entries = new ArrayList<>(accessTimes.entrySet());
+            entries.sort(Map.Entry.comparingByValue());
+
+            int idx = 0;
+            while (cache.size() > TARGET_CHUNKS_PER_SEED && idx < entries.size()) {
+                ChunkCoord evictCoord = entries.get(idx).getKey();
+                cache.remove(evictCoord);
+                accessTimes.remove(evictCoord);
+                idx++;
+            }
+        }
     }
     
     /**
