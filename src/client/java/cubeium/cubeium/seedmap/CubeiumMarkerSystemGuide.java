@@ -1,4 +1,4 @@
-package cubeium.cubeium.blazemap;
+package cubeium.cubeium.seedmap;
 
 /**
  * Configuration and setup guide for the Marker system.
@@ -16,7 +16,7 @@ package cubeium.cubeium.blazemap;
  * 
  * ICON RECOMMENDATIONS:
  * - Format: PNG with transparency (alpha channel)
- * - Size: 16x16 or 32x32 pixels (MarkerRenderer will scale to display size)
+ * - Size: 16x16 or 32x32 pixels (CubeiumMarkerRenderer will scale to display size)
  * - Colors: Bright, distinct colors for visibility on map
  * - Origin: Crosshair or star icon, neutral color (white/gray)
  * - Player: Simplified player head or player-shaped icon, bright color
@@ -25,9 +25,9 @@ package cubeium.cubeium.blazemap;
  * 
  * ADDING NEW MARKER TYPES:
  * 1. Add icon PNG file to markers/ folder
- * 2. Add MarkerType enum value in MapMarker.java
- * 3. Add Identifier and texture path in MarkerRenderer.initializeIconTextures()
- * 4. Use: session.markers.add(new MapMarker(MarkerType.YOURTYPE, x, z, "Label"))
+ * 2. Add MarkerType enum value in CubeiumMapMarker.java
+ * 3. Add Identifier and texture path in CubeiumMarkerRenderer.initializeIconTextures()
+ * 4. Use: session.markers.add(new CubeiumMapMarker(MarkerType.YOURTYPE, x, z, "Label"))
  * 
  * PLAYER HEAD RENDERING:
  * The system attempts to render the player's actual skin head on the player marker.
@@ -47,7 +47,7 @@ package cubeium.cubeium.blazemap;
  * - Markers are culled if outside visible map area
  * - Uses same coordinate math as hover tooltips for consistency
  */
-public class MarkerSystemGuide {
+public class CubeiumMarkerSystemGuide {
     // This is a documentation class with no runtime code.
-    // See MarkerRenderer.java for implementation details.
+    // See CubeiumMarkerRenderer.java for implementation details.
 }

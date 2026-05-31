@@ -1,4 +1,4 @@
-package cubeium.cubeium.blazemap;
+package cubeium.cubeium.seedmap;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -11,7 +11,7 @@ import java.util.Set;
 import cubeium.cubeium.rendering.MapTileRenderer;
 import cubeium.cubeium.world.generation.BiomeGenerator;
 
-public final class BiomeFilterCatalog {
+public final class CubeiumBiomeFilterCatalog {
     private static volatile List<BiomeGroup> cachedGroups;
     private static final Set<String> EXCLUDED_BIOMES = Set.of(
         "modified gravelly mountains",
@@ -27,7 +27,7 @@ public final class BiomeFilterCatalog {
         "savanna plateau"
     );
 
-    private BiomeFilterCatalog() {
+    private CubeiumBiomeFilterCatalog() {
     }
 
     public static List<BiomeGroup> getCategorizedBiomes(BiomeGenerator biomeGenerator) {
@@ -36,7 +36,7 @@ public final class BiomeFilterCatalog {
             return current;
         }
 
-        synchronized (BiomeFilterCatalog.class) {
+        synchronized (CubeiumBiomeFilterCatalog.class) {
             if (cachedGroups != null) {
                 return cachedGroups;
             }

@@ -1,10 +1,10 @@
-package cubeium.cubeium.blazemap;
+package cubeium.cubeium.seedmap;
 
 /**
  * Represents a marker on the seed map.
  * Markers are world-space positions with type and optional metadata.
  */
-public class MapMarker {
+public class CubeiumMapMarker {
     public enum MarkerType {
         ORIGIN,       // Fixed at (0, 0)
         PLAYER,       // Player's current position
@@ -22,7 +22,7 @@ public class MapMarker {
     // Type-specific metadata
     public Object metadata;
 
-    public MapMarker(MarkerType type, int worldX, int worldZ) {
+    public CubeiumMapMarker(MarkerType type, int worldX, int worldZ) {
         this.type = type;
         this.worldX = worldX;
         this.worldZ = worldZ;
@@ -31,7 +31,7 @@ public class MapMarker {
         this.metadata = null;
     }
 
-    public MapMarker(MarkerType type, int worldX, int worldZ, String label) {
+    public CubeiumMapMarker(MarkerType type, int worldX, int worldZ, String label) {
         this(type, worldX, worldZ);
         this.label = label;
     }
@@ -53,6 +53,6 @@ public class MapMarker {
 
     @Override
     public String toString() {
-        return String.format("MapMarker<%s>(%d, %d, label=%s)", type, worldX, worldZ, label);
+        return String.format("CubeiumMapMarker<%s>(%d, %d, label=%s)", type, worldX, worldZ, label);
     }
 }

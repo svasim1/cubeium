@@ -1,4 +1,4 @@
-package cubeium.cubeium.blazemap;
+package cubeium.cubeium.seedmap;
 
 import java.util.List;
 import java.util.Map;
@@ -14,8 +14,8 @@ import net.minecraft.util.Identifier;
  * Renders markers on the map.
  * Converts world coordinates to screen coordinates and draws icon textures.
  */
-public class MarkerRenderer {
-    private final Map<MapMarker.MarkerType, Identifier> iconTextures = new ConcurrentHashMap<>();
+public class CubeiumMarkerRenderer {
+    private final Map<CubeiumMapMarker.MarkerType, Identifier> iconTextures = new ConcurrentHashMap<>();
 
     // Icon texture paths - with fallbacks to parent gui folder if markers subfolder not populated
     private static final Identifier ORIGIN_ICON = Identifier.of("cubeium", "textures/gui/origin_icon.png");
@@ -30,21 +30,21 @@ public class MarkerRenderer {
     private static final Identifier STRONGHOLD_ICON = Identifier.of("cubeium", "textures/gui/markers/stronghold_icon.png");
     private static final Identifier STRONGHOLD_ICON_FALLBACK = Identifier.of("cubeium", "textures/gui/stronghold_icon.png");
 
-    public MarkerRenderer() {
+    public CubeiumMarkerRenderer() {
         initializeIconTextures();
     }
 
     private void initializeIconTextures() {
-        iconTextures.put(MapMarker.MarkerType.ORIGIN, ORIGIN_ICON);
-        iconTextures.put(MapMarker.MarkerType.PLAYER, PLAYER_ICON);
-        iconTextures.put(MapMarker.MarkerType.VILLAGE, VILLAGE_ICON);
-        iconTextures.put(MapMarker.MarkerType.STRONGHOLD, STRONGHOLD_ICON);
+        iconTextures.put(CubeiumMapMarker.MarkerType.ORIGIN, ORIGIN_ICON);
+        iconTextures.put(CubeiumMapMarker.MarkerType.PLAYER, PLAYER_ICON);
+        iconTextures.put(CubeiumMapMarker.MarkerType.VILLAGE, VILLAGE_ICON);
+        iconTextures.put(CubeiumMapMarker.MarkerType.STRONGHOLD, STRONGHOLD_ICON);
     }
 
     /**
      * Render all visible markers on the map.
      */
-    public void renderMarkers(DrawContext context, List<MapMarker> markers,
+    public void renderMarkers(DrawContext context, List<CubeiumMapMarker> markers,
                               int mapX, int mapY, int mapWidth, int mapHeight,
                               int mapCenterX, int mapCenterZ, int zoomLevel,
                               boolean showLabels) {
@@ -52,13 +52,13 @@ public class MarkerRenderer {
             return;
         }
 
-        for (MapMarker marker : markers) {
+        for (CubeiumMapMarker marker : markers) {
             if (!marker.visible) continue;
             renderMarker(context, marker, mapX, mapY, mapWidth, mapHeight, mapCenterX, mapCenterZ, zoomLevel, showLabels);
         }
     }
 
-    private void renderMarker(DrawContext context, MapMarker marker, int mapX, int mapY, int mapWidth, int mapHeight,
+    private void renderMarker(DrawContext context, CubeiumMapMarker marker, int mapX, int mapY, int mapWidth, int mapHeight,
                              int mapCenterX, int mapCenterZ, int zoomLevel, boolean showLabels) {
         // Convert world coordinates to screen coordinates
         ScreenPos screenPos = worldToScreen(marker.worldX, marker.worldZ,
@@ -71,7 +71,7 @@ public class MarkerRenderer {
         int iconY = screenPos.y - iconSize / 2;
 
         // Draw icon based on marker type
-        if (marker.type == MapMarker.MarkerType.PLAYER) {
+        if (marker.type == CubeiumMapMarker.MarkerType.PLAYER) {
             renderPlayerHeadMarker(context, marker, iconX, iconY, iconSize);
         } else {
             renderTextureIcon(context, marker, iconX, iconY, iconSize);
@@ -83,7 +83,7 @@ public class MarkerRenderer {
         }
     }
 
-    private void renderPlayerHeadMarker(DrawContext context, MapMarker marker, int iconX, int iconY, int iconSize) {
+    private void renderPlayerHeadMarker(DrawContext context, CubeiumMapMarker marker, int iconX, int iconY, int iconSize) {
         try {
             MinecraftClient client = MinecraftClient.getInstance();
             if (client == null || client.player == null) return;
@@ -100,7 +100,7 @@ public class MarkerRenderer {
                     sourceSize, sourceSize, 64, 64);
             } else {
                 // Fallback to generic player icon if skin loading fails
-                Identifier fallbackIcon = getFallbackIcon(MapMarker.MarkerType.PLAYER);
+                Identifier fallbackIcon = getFallbackIcon(CubeiumMapMarker.MarkerType.PLAYER);
                 if (fallbackIcon != null) {
                     context.drawTexture(RenderLayer::getGuiTextured, fallbackIcon,
                         iconX, iconY, 8.0F, 8.0F, iconSize, iconSize, iconSize, iconSize);
@@ -125,10 +125,10 @@ public class MarkerRenderer {
         }
     }
 
-    private void renderTextureIcon(DrawContext context, MapMarker marker, int iconX, int iconY, int iconSize) {
+    private void renderTextureIcon(DrawContext context, CubeiumMapMarker marker, int iconX, int iconY, int iconSize) {
         Identifier texture = iconTextures.get(marker.type);
         if (texture == null) {
-            texture = iconTextures.get(MapMarker.MarkerType.CUSTOM);
+            texture = iconTextures.get(CubeiumMapMarker.MarkerType.CUSTOM);
         }
         if (texture == null) return;
 
@@ -151,7 +151,7 @@ public class MarkerRenderer {
         }
     }
 
-    private Identifier getFallbackIcon(MapMarker.MarkerType type) {
+    private Identifier getFallbackIcon(CubeiumMapMarker.MarkerType type) {
         return switch (type) {
             case ORIGIN -> ORIGIN_ICON_FALLBACK;
             case PLAYER -> PLAYER_ICON_FALLBACK;

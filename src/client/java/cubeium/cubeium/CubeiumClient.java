@@ -2,7 +2,7 @@ package cubeium.cubeium;
 
 import org.lwjgl.glfw.GLFW;
 
-import cubeium.cubeium.blazemap.BlazeMapSeedScreen;
+import cubeium.cubeium.seedmap.CubeiumSeedMapScreen;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
@@ -42,13 +42,13 @@ public class CubeiumClient implements ClientModInitializer {
 
             if (seedMapKey.wasPressed()) {
                 Cubeium.LOGGER.info("[Cubeium] Seed map key pressed at tick {}", tickCount);
-                // Quiet mode: do not send a chat message when opening the BlazeMap screen
+                // Quiet mode: do not send a chat message when opening the seed map screen
 
                 try {
-                    client.setScreen(new BlazeMapSeedScreen());
-                    Cubeium.LOGGER.info("[Cubeium] BlazeMap screen opened successfully");
+                    client.setScreen(new CubeiumSeedMapScreen());
+                    Cubeium.LOGGER.info("[Cubeium] Seed map screen opened successfully");
                 } catch (Exception e) {
-                    Cubeium.LOGGER.error("[Cubeium] Failed to open BlazeMap screen", e);
+                    Cubeium.LOGGER.error("[Cubeium] Failed to open seed map screen", e);
                 }
             }
         });
