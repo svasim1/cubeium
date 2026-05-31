@@ -1,15 +1,15 @@
 package cubeium.cubeium.blazemap;
 
-import cubeium.cubeium.world.generation.BiomeGenerator;
-import cubeium.cubeium.rendering.MapTileRenderer;
-
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.Comparator;
-import java.util.Locale;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+
+import cubeium.cubeium.rendering.MapTileRenderer;
+import cubeium.cubeium.world.generation.BiomeGenerator;
 
 final class BiomeFilterCatalog {
     private static volatile List<BiomeGroup> cachedGroups;

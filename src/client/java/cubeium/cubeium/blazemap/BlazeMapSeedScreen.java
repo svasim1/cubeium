@@ -1,9 +1,15 @@
 package cubeium.cubeium.blazemap;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+
 import cubeium.cubeium.Cubeium;
 import cubeium.cubeium.gui.MouseSubpixelSmoother;
 import cubeium.cubeium.rendering.MapTileRenderer;
@@ -20,11 +26,6 @@ import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
-
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 /**
  * Complete BlazeMap-style seed map screen.
