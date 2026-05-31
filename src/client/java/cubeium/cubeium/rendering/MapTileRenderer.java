@@ -11,6 +11,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import cubeium.cubeium.Cubeium;
+import cubeium.cubeium.blazemap.BlazeMapSeedScreen;
 import cubeium.cubeium.util.RenderMetrics;
 import cubeium.cubeium.world.MapCache;
 import net.minecraft.client.gui.DrawContext;
@@ -63,7 +64,8 @@ public class MapTileRenderer {
      */
     public void renderMap(DrawContext context, long seed, 
                          int screenX, int screenY, int screenWidth, int screenHeight,
-                         int mapCenterX, int mapCenterZ, int zoomLevel) {
+                         int mapCenterX, int mapCenterZ, int zoomLevel,
+                         BlazeMapSeedScreen.SeedMapSession session) {
         
         // Calculate which tiles are visible
         int blocksPerPixel = zoomLevel;
@@ -131,7 +133,7 @@ public class MapTileRenderer {
             for (int tileX = tileLeft; tileX <= tileRight; tileX++) {
                 renderTile(context, seed, tileX, tileZ, resolutionScale,
                           screenX, screenY, screenWidth, screenHeight, 
-                          mapCenterX, mapCenterZ, blocksPerPixel);
+                          mapCenterX, mapCenterZ, blocksPerPixel, session);
             }
         }
         
@@ -146,7 +148,8 @@ public class MapTileRenderer {
      */
     private void renderTile(DrawContext context, long seed, int tileX, int tileZ, int resolutionScale,
                            int screenX, int screenY, int screenWidth, int screenHeight,
-                           int mapCenterX, int mapCenterZ, int blocksPerPixel) {
+                           int mapCenterX, int mapCenterZ, int blocksPerPixel,
+                           BlazeMapSeedScreen.SeedMapSession session) {
         
         TileKey key = new TileKey(seed, tileX, tileZ, resolutionScale);
         CachedTile tile = tileCache.get(key);
@@ -171,7 +174,7 @@ public class MapTileRenderer {
                     synthesizedTile.touch();
                     RenderMetrics.get().recordTileDraw();
                     renderTileData(context, synthesizedTile, tileX, tileZ, resolutionScale,
-                        screenX, screenY, screenWidth, screenHeight, mapCenterX, mapCenterZ, blocksPerPixel);
+                        screenX, screenY, screenWidth, screenHeight, mapCenterX, mapCenterZ, blocksPerPixel, session);
                     return;
                 }
 
@@ -182,7 +185,7 @@ public class MapTileRenderer {
                     RenderMetrics.get().recordTileDraw();
                     renderTileData(context, fallbackTile.tile, fallbackTile.tileX, fallbackTile.tileZ, fallbackTile.resolutionScale,
                         screenX, screenY,
-                        screenWidth, screenHeight, mapCenterX, mapCenterZ, blocksPerPixel);
+                        screenWidth, screenHeight, mapCenterX, mapCenterZ, blocksPerPixel, session);
                     return;
                 }
             }
@@ -201,7 +204,7 @@ public class MapTileRenderer {
         if (tile != null && tile.biomeData != null) {
             RenderMetrics.get().recordTileDraw();
             renderTileData(context, tile, tileX, tileZ, resolutionScale, screenX, screenY,
-                          screenWidth, screenHeight, mapCenterX, mapCenterZ, blocksPerPixel);
+                          screenWidth, screenHeight, mapCenterX, mapCenterZ, blocksPerPixel, session);
         }
     }
     
@@ -210,7 +213,8 @@ public class MapTileRenderer {
      */
     private void renderTileData(DrawContext context, CachedTile tile, int tileX, int tileZ, int resolutionScale,
                                int screenX, int screenY, int screenWidth, int screenHeight,
-                               int mapCenterX, int mapCenterZ, int blocksPerPixel) {
+                               int mapCenterX, int mapCenterZ, int blocksPerPixel,
+                               BlazeMapSeedScreen.SeedMapSession session) {
         int tileWorldSize = TILE_SIZE * resolutionScale;
         int tileWorldX = tileX * tileWorldSize;
         int tileWorldZ = tileZ * tileWorldSize;
@@ -249,6 +253,9 @@ public class MapTileRenderer {
 
                 int biomeId = tile.biomeData[biomeIndex];
                 int color = getBiomeColor(biomeId);
+                if (session != null && !session.isBiomeVisible(biomeId)) {
+                    color = 0xFF262626;
+                }
                 context.fill(pixelX, pixelY, pixelX + 1, pixelY + 1, color);
             }
         }

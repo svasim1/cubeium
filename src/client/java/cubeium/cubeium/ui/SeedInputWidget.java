@@ -23,11 +23,11 @@ public class SeedInputWidget extends TextFieldWidget {
     }
     
     public SeedInputWidget(TextRenderer textRenderer, int x, int y, SeedChangeListener listener) {
-        super(textRenderer, x, y, WIDGET_WIDTH, WIDGET_HEIGHT, Text.literal("Seed"));
+        super(textRenderer, x, y, WIDGET_WIDTH, WIDGET_HEIGHT, Text.translatable("cubeium.ui.seed"));
         this.listener = listener;
         
         // Set placeholder text
-        this.setPlaceholder(Text.literal("Enter seed or leave empty for random"));
+        this.setPlaceholder(Text.translatable("cubeium.ui.seed_placeholder"));
         
         // Set up change listener
         this.setChangedListener(this::onTextChanged);
