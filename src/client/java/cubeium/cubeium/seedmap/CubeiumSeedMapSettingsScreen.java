@@ -1,4 +1,4 @@
-package cubeium.cubeium.blazemap;
+package cubeium.cubeium.seedmap;
 
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
@@ -7,13 +7,13 @@ import net.minecraft.client.render.RenderLayer;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
-public class BlazeMapSettingsScreen extends Screen {
+public class CubeiumSeedMapSettingsScreen extends Screen {
 
     private static final Identifier SETTINGS_ICON_TEXTURE =
             Identifier.of("cubeium", "textures/gui/settings_icon.png");
 
     private final Screen parent;
-    private final BlazeMapSeedScreen.SeedMapSession session;
+    private final CubeiumSeedMapScreen.SeedMapSession session;
 
     private ButtonWidget floatingTooltipButton;
     private ButtonWidget renderMetricsButton;
@@ -22,7 +22,7 @@ public class BlazeMapSettingsScreen extends Screen {
     private ButtonWidget biomeFilterButton;
     private ButtonWidget preservePanButton;
 
-    public BlazeMapSettingsScreen(Screen parent, BlazeMapSeedScreen.SeedMapSession session) {
+    public CubeiumSeedMapSettingsScreen(Screen parent, CubeiumSeedMapScreen.SeedMapSession session) {
         super(Text.translatable("cubeium.settings.title"));
         this.parent = parent;
         this.session = session;
@@ -35,37 +35,35 @@ public class BlazeMapSettingsScreen extends Screen {
         int panelWidth = 220;
         int panelX = (width - panelWidth) / 2;
 
-        // --- Map Settings > Other ---
         int mapOtherY = 72;
         floatingTooltipButton = ButtonWidget.builder(floatingTooltipLabel(), btn -> {
-            session.showFloatingTooltip = !session.showFloatingTooltip;
+            session.setShowFloatingTooltip(!session.isShowFloatingTooltip());
             btn.setMessage(floatingTooltipLabel());
-            BlazeMapSeedScreen.savePersistentSettings(session);
+            CubeiumSeedMapSettingsStore.savePersistentSettings(session);
         }).dimensions(panelX, mapOtherY, panelWidth, 20).build();
         addDrawableChild(floatingTooltipButton);
 
-        // --- Advanced / Debug ---
         int advancedY = mapOtherY + 62;
         renderMetricsButton = ButtonWidget.builder(renderMetricsLabel(), btn -> {
-            session.showPerformanceInfo = !session.showPerformanceInfo;
+            session.setShowPerformanceInfo(!session.isShowPerformanceInfo());
             btn.setMessage(renderMetricsLabel());
-            BlazeMapSeedScreen.savePersistentSettings(session);
+            CubeiumSeedMapSettingsStore.savePersistentSettings(session);
         }).dimensions(panelX, advancedY, panelWidth, 20).build();
         addDrawableChild(renderMetricsButton);
 
         int teleportY = advancedY + 26;
         teleportMenuButton = ButtonWidget.builder(teleportLabel(), btn -> {
-            session.enableTeleportInContextMenu = !session.enableTeleportInContextMenu;
+            session.setEnableTeleportInContextMenu(!session.isEnableTeleportInContextMenu());
             btn.setMessage(teleportLabel());
-            BlazeMapSeedScreen.savePersistentSettings(session);
+            CubeiumSeedMapSettingsStore.savePersistentSettings(session);
         }).dimensions(panelX, teleportY, panelWidth, 20).build();
         addDrawableChild(teleportMenuButton);
 
         int labelsY = teleportY + 26;
         markerLabelsButton = ButtonWidget.builder(markerLabelsLabel(), btn -> {
-            session.showMarkerLabels = !session.showMarkerLabels;
+            session.setShowMarkerLabels(!session.isShowMarkerLabels());
             btn.setMessage(markerLabelsLabel());
-            BlazeMapSeedScreen.savePersistentSettings(session);
+            CubeiumSeedMapSettingsStore.savePersistentSettings(session);
         }).dimensions(panelX, labelsY, panelWidth, 20).build();
         addDrawableChild(markerLabelsButton);
 
@@ -77,42 +75,41 @@ public class BlazeMapSettingsScreen extends Screen {
 
         int preservePanY = biomeFilterY + 26;
         preservePanButton = ButtonWidget.builder(preservePanLabel(), btn -> {
-            session.preservePanOnOpen = !session.preservePanOnOpen;
+            session.setPreservePanOnOpen(!session.isPreservePanOnOpen());
             btn.setMessage(preservePanLabel());
-            BlazeMapSeedScreen.savePersistentSettings(session);
+            CubeiumSeedMapSettingsStore.savePersistentSettings(session);
         }).dimensions(panelX, preservePanY, panelWidth, 20).build();
         addDrawableChild(preservePanButton);
 
-        // Done
         addDrawableChild(ButtonWidget.builder(Text.translatable("cubeium.button.done"), btn -> close())
             .dimensions((width - 100) / 2, height - 36, 100, 20)
             .build());
     }
 
     private Text floatingTooltipLabel() {
-        return Text.translatable("cubeium.settings.floating_tooltip", session.showFloatingTooltip ? Text.translatable("cubeium.state.on") : Text.translatable("cubeium.state.off"));
+        return Text.translatable("cubeium.settings.floating_tooltip", session.isShowFloatingTooltip() ? Text.translatable("cubeium.state.on") : Text.translatable("cubeium.state.off"));
     }
 
     private Text teleportLabel() {
-        return Text.translatable("cubeium.settings.teleport_menu_item", session.enableTeleportInContextMenu ? Text.translatable("cubeium.state.on") : Text.translatable("cubeium.state.off"));
+        return Text.translatable("cubeium.settings.teleport_menu_item", session.isEnableTeleportInContextMenu() ? Text.translatable("cubeium.state.on") : Text.translatable("cubeium.state.off"));
     }
 
     private Text renderMetricsLabel() {
-        return Text.translatable("cubeium.settings.render_metrics", session.showPerformanceInfo ? Text.translatable("cubeium.state.on") : Text.translatable("cubeium.state.off"));
+        return Text.translatable("cubeium.settings.render_metrics", session.isShowPerformanceInfo() ? Text.translatable("cubeium.state.on") : Text.translatable("cubeium.state.off"));
     }
 
     private Text markerLabelsLabel() {
-        return Text.translatable("cubeium.settings.marker_labels", session.showMarkerLabels ? Text.translatable("cubeium.state.on") : Text.translatable("cubeium.state.off"));
+        return Text.translatable("cubeium.settings.marker_labels", session.isShowMarkerLabels() ? Text.translatable("cubeium.state.on") : Text.translatable("cubeium.state.off"));
     }
 
     private void openBiomeFilter() {
         if (client != null) {
-            client.setScreen(new BiomeFilterScreen(this, session));
+            client.setScreen(new CubeiumBiomeFilterScreen(this, session));
         }
     }
 
     private Text preservePanLabel() {
-        return Text.translatable("cubeium.settings.preserve_pan", session.preservePanOnOpen ? Text.translatable("cubeium.state.on") : Text.translatable("cubeium.state.off"));
+        return Text.translatable("cubeium.settings.preserve_pan", session.isPreservePanOnOpen() ? Text.translatable("cubeium.state.on") : Text.translatable("cubeium.state.off"));
     }
 
     @Override
@@ -120,7 +117,6 @@ public class BlazeMapSettingsScreen extends Screen {
         Screen.renderBackgroundTexture(context, MENU_BACKGROUND_TEXTURE, 0, 0, 0.0F, 0.0F, width, height);
         super.render(context, mouseX, mouseY, delta);
 
-        // Title with settings icon
         int titleX = width / 2;
         int titleY = 16;
         context.drawCenteredTextWithShadow(textRenderer, title, titleX, titleY, 0xFFFFFFFF);
@@ -130,7 +126,6 @@ public class BlazeMapSettingsScreen extends Screen {
         context.drawTexture(RenderLayer::getGuiTextured, SETTINGS_ICON_TEXTURE,
             iconX, iconY, 0.0F, 0.0F, iconSize, iconSize, iconSize, iconSize);
 
-        // Section headers
         if (floatingTooltipButton != null) {
             context.drawText(textRenderer, Text.translatable("cubeium.settings.section_map_other").getString(),
                 floatingTooltipButton.getX(), floatingTooltipButton.getY() - 14, 0xFFAAAAAA, false);
@@ -148,7 +143,7 @@ public class BlazeMapSettingsScreen extends Screen {
 
     @Override
     public void close() {
-        BlazeMapSeedScreen.savePersistentSettings(session);
+        CubeiumSeedMapSettingsStore.savePersistentSettings(session);
         client.setScreen(parent);
     }
 }

@@ -1,4 +1,4 @@
-package cubeium.cubeium.blazemap;
+package cubeium.cubeium.seedmap;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -28,10 +28,10 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
 /**
- * Complete BlazeMap-style seed map screen.
+ * Complete Cubeium seed map screen.
  * Features professional map rendering, smooth navigation, and precise coordinate system.
  */
-public class BlazeMapSeedScreen extends Screen {
+public class CubeiumSeedMapScreen extends Screen {
     private static SeedMapSession sharedSession;
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final String SETTINGS_FILE_NAME = "cubeium-client-settings.json";
@@ -44,7 +44,7 @@ public class BlazeMapSeedScreen extends Screen {
     private final MapTileRenderer tileRenderer;
     private final MouseSubpixelSmoother mouseSmoother;
     private final SeedMapSession session;
-    private MarkerRenderer markerRenderer;
+    private CubeiumMarkerRenderer markerRenderer;
     
     // Map state (Fixed to match working SeedMapScreen approach)
     private long currentSeed = 0L;
@@ -90,7 +90,7 @@ public class BlazeMapSeedScreen extends Screen {
     // Viewport
     private int mapX, mapY, mapWidth, mapHeight;
     
-    public BlazeMapSeedScreen() {
+    public CubeiumSeedMapScreen() {
         super(Text.empty());
 
         try {
@@ -108,7 +108,7 @@ public class BlazeMapSeedScreen extends Screen {
             lastGeneratedSeed = session.lastGeneratedSeed;
         } catch (Exception e) {
             // initialization error log removed
-            throw new RuntimeException("BlazeMapSeedScreen initialization failed", e);
+            throw new RuntimeException("CubeiumSeedMapScreen initialization failed", e);
         }
     }
     
@@ -126,7 +126,7 @@ public class BlazeMapSeedScreen extends Screen {
             centerMapOnPlayer();
         }
         
-        // Seed input field (BlazeMap-style positioned)
+        // Seed input field (Cubeium-style positioned)
         int topBarX = 10;
         int topBarY = 20;
         seedInput = new SeedInputWidget(
@@ -180,9 +180,9 @@ public class BlazeMapSeedScreen extends Screen {
         addDrawableChild(settingsButton);
 
         // Initialize marker renderer and origin marker
-        markerRenderer = new MarkerRenderer();
+        markerRenderer = new CubeiumMarkerRenderer();
         if (session.markers.isEmpty()) {
-            session.markers.add(new MapMarker(MapMarker.MarkerType.ORIGIN, 0, 0, Text.translatable("cubeium.ui.origin").getString()));
+            session.markers.add(new CubeiumMapMarker(CubeiumMapMarker.MarkerType.ORIGIN, 0, 0, Text.translatable("cubeium.ui.origin").getString()));
         }
 
         syncNavigationMenuState();
@@ -243,9 +243,9 @@ public class BlazeMapSeedScreen extends Screen {
             if (client == null || client.player == null) return;
 
             // Find or create player marker
-            MapMarker playerMarker = null;
-            for (MapMarker marker : session.markers) {
-                if (marker.type == MapMarker.MarkerType.PLAYER) {
+            CubeiumMapMarker playerMarker = null;
+            for (CubeiumMapMarker marker : session.markers) {
+                if (marker.type == CubeiumMapMarker.MarkerType.PLAYER) {
                     playerMarker = marker;
                     break;
                 }
@@ -255,7 +255,7 @@ public class BlazeMapSeedScreen extends Screen {
             int playerWorldZ = (int) client.player.getZ();
 
             if (playerMarker == null) {
-                playerMarker = new MapMarker(MapMarker.MarkerType.PLAYER, playerWorldX, playerWorldZ, "Player");
+                playerMarker = new CubeiumMapMarker(CubeiumMapMarker.MarkerType.PLAYER, playerWorldX, playerWorldZ, "Player");
                 session.markers.add(playerMarker);
             } else {
                 playerMarker.setPosition(playerWorldX, playerWorldZ);
@@ -534,7 +534,7 @@ public class BlazeMapSeedScreen extends Screen {
     }
     
     /**
-     * Render UI overlays (BlazeMap-style)
+    * Render UI overlays.
      */
     private void renderUI(DrawContext context, int mouseX, int mouseY) {
     // Title removed per UI cleanup
@@ -649,13 +649,13 @@ public class BlazeMapSeedScreen extends Screen {
 
     private void openSettings() {
         if (client != null) {
-            client.setScreen(new BlazeMapSettingsScreen(this, session));
+            client.setScreen(new CubeiumSeedMapSettingsScreen(this, session));
         }
     }
 
     private void openBiomeFilter() {
         if (client != null) {
-            client.setScreen(new BiomeFilterScreen(this, session));
+            client.setScreen(new CubeiumBiomeFilterScreen(this, session));
         }
     }
 
@@ -878,7 +878,7 @@ public class BlazeMapSeedScreen extends Screen {
     /**
      * Generate random seed using working approach
      */
-    // random seed functionality removed from BlazeMap UI
+    // random seed functionality removed from Cubeium UI
     
     /**
      * Reset view to origin
@@ -1046,7 +1046,7 @@ public class BlazeMapSeedScreen extends Screen {
             Files.createDirectories(settingsPath.getParent());
             Files.writeString(settingsPath, GSON.toJson(root), StandardCharsets.UTF_8);
         } catch (IOException e) {
-            Cubeium.LOGGER.warn("[BlazeMapSeedScreen] Failed to save settings", e);
+            Cubeium.LOGGER.warn("[CubeiumSeedMapScreen] Failed to save settings", e);
         }
     }
 
@@ -1092,7 +1092,7 @@ public class BlazeMapSeedScreen extends Screen {
                 }
             }
         } catch (Exception e) {
-            Cubeium.LOGGER.warn("[BlazeMapSeedScreen] Failed to load settings", e);
+            Cubeium.LOGGER.warn("[CubeiumSeedMapScreen] Failed to load settings", e);
         }
     }
 
@@ -1104,7 +1104,7 @@ public class BlazeMapSeedScreen extends Screen {
         public final BiomeGenerator biomeGenerator;
         public final MapCache mapCache;
         public final MapTileRenderer tileRenderer;
-        public final java.util.List<MapMarker> markers = new java.util.concurrent.CopyOnWriteArrayList<>();
+        public final java.util.List<CubeiumMapMarker> markers = new java.util.concurrent.CopyOnWriteArrayList<>();
 
         public long currentSeed = 0L;
         public boolean hasValidSeed = false;
@@ -1122,6 +1122,58 @@ public class BlazeMapSeedScreen extends Screen {
         public final java.util.LinkedHashSet<Integer> selectedBiomeIds = new java.util.LinkedHashSet<>();
         public String seedInputText = "";
 
+        public BiomeGenerator getBiomeGenerator() {
+            return biomeGenerator;
+        }
+
+        public boolean isShowPerformanceInfo() {
+            return showPerformanceInfo;
+        }
+
+        public void setShowPerformanceInfo(boolean value) {
+            showPerformanceInfo = value;
+        }
+
+        public boolean isShowFloatingTooltip() {
+            return showFloatingTooltip;
+        }
+
+        public void setShowFloatingTooltip(boolean value) {
+            showFloatingTooltip = value;
+        }
+
+        public boolean isEnableTeleportInContextMenu() {
+            return enableTeleportInContextMenu;
+        }
+
+        public void setEnableTeleportInContextMenu(boolean value) {
+            enableTeleportInContextMenu = value;
+        }
+
+        public boolean isShowMarkerLabels() {
+            return showMarkerLabels;
+        }
+
+        public void setShowMarkerLabels(boolean value) {
+            showMarkerLabels = value;
+        }
+
+        public boolean isPreservePanOnOpen() {
+            return preservePanOnOpen;
+        }
+
+        public void setPreservePanOnOpen(boolean value) {
+            preservePanOnOpen = value;
+        }
+
+        public boolean isBiomeFilteringEnabled() {
+            return biomeFilteringEnabled;
+        }
+
+        public void setBiomeFilteringEnabled(boolean value) {
+            biomeFilteringEnabled = value;
+        }
+
         public boolean isBiomeVisible(int biomeId) {
             return !biomeFilteringEnabled || selectedBiomeIds.contains(biomeId);
         }
@@ -1130,9 +1182,9 @@ public class BlazeMapSeedScreen extends Screen {
             return selectedBiomeIds.size();
         }
 
-        public void selectAllBiomes(java.util.List<BiomeFilterCatalog.BiomeEntry> biomes) {
+        public void selectAllBiomes(java.util.List<CubeiumBiomeFilterCatalog.BiomeEntry> biomes) {
             selectedBiomeIds.clear();
-            for (BiomeFilterCatalog.BiomeEntry biome : biomes) {
+            for (CubeiumBiomeFilterCatalog.BiomeEntry biome : biomes) {
                 selectedBiomeIds.add(biome.id());
             }
         }
@@ -1141,9 +1193,9 @@ public class BlazeMapSeedScreen extends Screen {
             selectedBiomeIds.clear();
         }
 
-        public void invertBiomes(java.util.List<BiomeFilterCatalog.BiomeEntry> biomes) {
+        public void invertBiomes(java.util.List<CubeiumBiomeFilterCatalog.BiomeEntry> biomes) {
             java.util.LinkedHashSet<Integer> inverted = new java.util.LinkedHashSet<>();
-            for (BiomeFilterCatalog.BiomeEntry biome : biomes) {
+            for (CubeiumBiomeFilterCatalog.BiomeEntry biome : biomes) {
                 if (!selectedBiomeIds.contains(biome.id())) {
                     inverted.add(biome.id());
                 }

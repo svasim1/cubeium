@@ -8,7 +8,7 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.text.Text;
 
-class BiomeFilterScreen extends Screen {
+public class BiomeFilterScreen extends Screen {
     private static final int TOP_BUTTON_WIDTH = 74;
     private static final int TOP_BUTTON_HEIGHT = 20;
     private static final int TOP_BUTTON_GAP = 6;
@@ -46,7 +46,7 @@ class BiomeFilterScreen extends Screen {
     private int listWidth;
     private int listHeight;
 
-    BiomeFilterScreen(Screen parent, BlazeMapSeedScreen.SeedMapSession session) {
+    public BiomeFilterScreen(Screen parent, BlazeMapSeedScreen.SeedMapSession session) {
         super(Text.translatable("cubeium.biome_filter.title"));
         this.parent = parent;
         this.session = session;

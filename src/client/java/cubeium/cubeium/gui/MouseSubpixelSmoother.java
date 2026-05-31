@@ -2,7 +2,7 @@ package cubeium.cubeium.gui;
 
 /**
  * Smooth mouse movement handler that accumulates fractional pixel movements.
- * Based on BlazeMap's MouseSubpixelSmoother for precise panning.
+ * Smooth mouse movement handler for precise panning.
  */
 public class MouseSubpixelSmoother {
     private double partialX, partialY;

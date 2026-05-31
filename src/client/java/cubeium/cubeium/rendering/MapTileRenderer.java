@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import cubeium.cubeium.Cubeium;
-import cubeium.cubeium.blazemap.BlazeMapSeedScreen;
+import cubeium.cubeium.seedmap.CubeiumSeedMapScreen;
 import cubeium.cubeium.util.RenderMetrics;
 import cubeium.cubeium.world.MapCache;
 import net.minecraft.client.gui.DrawContext;
@@ -65,7 +65,7 @@ public class MapTileRenderer {
     public void renderMap(DrawContext context, long seed, 
                          int screenX, int screenY, int screenWidth, int screenHeight,
                          int mapCenterX, int mapCenterZ, int zoomLevel,
-                         BlazeMapSeedScreen.SeedMapSession session) {
+                         CubeiumSeedMapScreen.SeedMapSession session) {
         
         // Calculate which tiles are visible
         int blocksPerPixel = zoomLevel;
@@ -149,7 +149,7 @@ public class MapTileRenderer {
     private void renderTile(DrawContext context, long seed, int tileX, int tileZ, int resolutionScale,
                            int screenX, int screenY, int screenWidth, int screenHeight,
                            int mapCenterX, int mapCenterZ, int blocksPerPixel,
-                           BlazeMapSeedScreen.SeedMapSession session) {
+                           CubeiumSeedMapScreen.SeedMapSession session) {
         
         TileKey key = new TileKey(seed, tileX, tileZ, resolutionScale);
         CachedTile tile = tileCache.get(key);
@@ -214,7 +214,7 @@ public class MapTileRenderer {
     private void renderTileData(DrawContext context, CachedTile tile, int tileX, int tileZ, int resolutionScale,
                                int screenX, int screenY, int screenWidth, int screenHeight,
                                int mapCenterX, int mapCenterZ, int blocksPerPixel,
-                               BlazeMapSeedScreen.SeedMapSession session) {
+                               CubeiumSeedMapScreen.SeedMapSession session) {
         int tileWorldSize = TILE_SIZE * resolutionScale;
         int tileWorldX = tileX * tileWorldSize;
         int tileWorldZ = tileZ * tileWorldSize;
@@ -819,7 +819,7 @@ public class MapTileRenderer {
     /**
      * Pre-generate and cache tiles covering the given viewport in the background.
      * This is a best-effort warm-up and will not block the calling thread.
-     * Parameters match the call-site in BlazeMapSeedScreen: width/height are in
+    * Parameters match the call-site in CubeiumSeedMapScreen: width/height are in
      * screen pixels, zoomLevel is blocks-per-pixel.
      */
     public void prewarmTiles(long seed, int centerX, int centerZ, int widthPx, int heightPx, int zoomLevel) {
