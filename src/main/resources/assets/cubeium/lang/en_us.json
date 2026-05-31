@@ -1,4 +1,41 @@
 {
   "key.cubeium.seedmap": "Open Seed Map",
-  "category.cubeium.keybinds": "Cubeium"
-} 
+  "category.cubeium.keybinds": "Cubeium",
+
+  "cubeium.ui.origin": "Origin (0, 0)",
+  "cubeium.ui.go": "Go",
+  "cubeium.ui.filter": "Filter",
+  "cubeium.ui.field_x": "X",
+  "cubeium.ui.field_z": "Z",
+  "cubeium.ui.label_x": "X:",
+  "cubeium.ui.label_z": "Z:",
+
+  "cubeium.menu.copy": "Copy",
+  "cubeium.menu.teleport": "Teleport",
+  "cubeium.menu.coordinates_line": "X: %s  Z: %s",
+
+  "cubeium.ui.seed": "Seed",
+  "cubeium.ui.seed_placeholder": "Enter seed or leave empty for random",
+  "cubeium.ui.generating_map": "Generating map...",
+  "cubeium.ui.enter_seed_to_start": "Enter a seed to start",
+  "cubeium.ui.metrics_title": "CubeiumMetrics",
+
+  "cubeium.settings.title": "Cubeium Settings",
+  "cubeium.button.done": "Done",
+  "cubeium.settings.floating_tooltip": "Floating Tooltip: %s",
+  "cubeium.settings.render_metrics": "Render Metrics: %s",
+  "cubeium.settings.teleport_menu_item": "Teleport menu item: %s",
+  "cubeium.settings.marker_labels": "Marker labels: %s",
+  "cubeium.settings.biome_filter": "Biome filter...",
+  "cubeium.settings.preserve_pan": "Preserve pan on open: %s",
+  "cubeium.biome_filter.title": "Biome Filter",
+  "cubeium.biome_filter.enabled": "Filter enabled: %s",
+  "cubeium.biome_filter.select_all": "Select all",
+  "cubeium.biome_filter.clear": "Clear",
+  "cubeium.biome_filter.invert": "Invert",
+  "cubeium.biome_filter.selected_count": "Selected biomes: %s / %s",
+  "cubeium.state.on": "On",
+  "cubeium.state.off": "Off",
+  "cubeium.settings.section_map_other": "Map Settings  ›  Other",
+  "cubeium.settings.section_advanced": "Advanced / Debug"
+}

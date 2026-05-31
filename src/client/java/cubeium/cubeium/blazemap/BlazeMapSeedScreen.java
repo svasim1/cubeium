@@ -1,5 +1,9 @@
 package cubeium.cubeium.blazemap;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import cubeium.cubeium.Cubeium;
 import cubeium.cubeium.gui.MouseSubpixelSmoother;
 import cubeium.cubeium.rendering.MapTileRenderer;
@@ -7,6 +11,7 @@ import cubeium.cubeium.ui.SeedInputWidget;
 import cubeium.cubeium.util.RenderMetrics;
 import cubeium.cubeium.world.MapCache;
 import cubeium.cubeium.world.generation.BiomeGenerator;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
@@ -16,12 +21,19 @@ import net.minecraft.client.render.RenderLayer;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 /**
  * Complete BlazeMap-style seed map screen.
  * Features professional map rendering, smooth navigation, and precise coordinate system.
  */
 public class BlazeMapSeedScreen extends Screen {
     private static SeedMapSession sharedSession;
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final String SETTINGS_FILE_NAME = "cubeium-client-settings.json";
     private static final Identifier NAVIGATION_ICON_TEXTURE = Identifier.of("cubeium", "textures/gui/navigation_icon.png");
     private static final Identifier SETTINGS_ICON_TEXTURE = Identifier.of("cubeium", "textures/gui/settings_icon.png");
     
@@ -47,12 +59,19 @@ public class BlazeMapSeedScreen extends Screen {
     // UI components
     private SeedInputWidget seedInput;
     private ButtonWidget navigationMenuButton;
+    private ButtonWidget filterButton;
     private TextFieldWidget travelXInput;
     private TextFieldWidget travelZInput;
     private ButtonWidget travelGoButton;
     private ButtonWidget travelOriginButton;
     private ButtonWidget settingsButton;
     private boolean isNavigationMenuOpen = false;
+    // Right-click context menu
+    private ContextMenu contextMenu = null;
+    private int navPanelLeft;
+    private int navPanelTop;
+    private int navPanelRight;
+    private int navPanelBottom;
     
     // Mouse state
     private boolean isDragging = false;
@@ -101,6 +120,10 @@ public class BlazeMapSeedScreen extends Screen {
         mapY = 60;
         mapWidth = width - 20;
         mapHeight = height - 100;
+
+        if (!session.preservePanOnOpen) {
+            centerMapOnPlayer();
+        }
         
         // Seed input field (BlazeMap-style positioned)
         int topBarX = 10;
@@ -119,7 +142,12 @@ public class BlazeMapSeedScreen extends Screen {
                 .build();
         addDrawableChild(navigationMenuButton);
 
-        travelOriginButton = ButtonWidget.builder(Text.literal("Origin (0, 0)"), button -> {
+        filterButton = ButtonWidget.builder(Text.translatable("cubeium.ui.filter"), button -> openBiomeFilter())
+            .dimensions(topBarX + 232, topBarY, 54, 20)
+            .build();
+        addDrawableChild(filterButton);
+
+        travelOriginButton = ButtonWidget.builder(Text.translatable("cubeium.ui.origin"), button -> {
                 resetView();
                 isNavigationMenuOpen = false;
                 syncNavigationMenuState();
@@ -128,17 +156,17 @@ public class BlazeMapSeedScreen extends Screen {
             .build();
         addDrawableChild(travelOriginButton);
 
-        travelXInput = new TextFieldWidget(textRenderer, 0, 0, 82, 20, Text.literal("X"));
-        travelXInput.setPlaceholder(Text.literal("X"));
+        travelXInput = new TextFieldWidget(textRenderer, 0, 0, 82, 20, Text.translatable("cubeium.ui.field_x"));
+        travelXInput.setPlaceholder(Text.translatable("cubeium.ui.field_x"));
         travelXInput.setMaxLength(12);
         addDrawableChild(travelXInput);
 
-        travelZInput = new TextFieldWidget(textRenderer, 0, 0, 82, 20, Text.literal("Z"));
-        travelZInput.setPlaceholder(Text.literal("Z"));
+        travelZInput = new TextFieldWidget(textRenderer, 0, 0, 82, 20, Text.translatable("cubeium.ui.field_z"));
+        travelZInput.setPlaceholder(Text.translatable("cubeium.ui.field_z"));
         travelZInput.setMaxLength(12);
         addDrawableChild(travelZInput);
 
-        travelGoButton = ButtonWidget.builder(Text.literal("Go"), button -> travelToCoordinates())
+        travelGoButton = ButtonWidget.builder(Text.translatable("cubeium.ui.go"), button -> travelToCoordinates())
             .dimensions(0, 0, 44, 20)
             .build();
         addDrawableChild(travelGoButton);
@@ -153,7 +181,7 @@ public class BlazeMapSeedScreen extends Screen {
         // Initialize marker renderer and origin marker
         markerRenderer = new MarkerRenderer();
         if (session.markers.isEmpty()) {
-            session.markers.add(new MapMarker(MapMarker.MarkerType.ORIGIN, 0, 0, "Origin (0, 0)"));
+            session.markers.add(new MapMarker(MapMarker.MarkerType.ORIGIN, 0, 0, Text.translatable("cubeium.ui.origin").getString()));
         }
 
         syncNavigationMenuState();
@@ -235,6 +263,17 @@ public class BlazeMapSeedScreen extends Screen {
             // Silently ignore player tracking errors
         }
     }
+
+    private void centerMapOnPlayer() {
+        try {
+            MinecraftClient mc = MinecraftClient.getInstance();
+            if (mc != null && mc.player != null) {
+                mapCenterX = (int) mc.player.getX();
+                mapCenterZ = (int) mc.player.getZ();
+            }
+        } catch (Exception ignored) {
+        }
+    }
     
     private void tryGetWorldSeed() {
         try {
@@ -277,7 +316,10 @@ public class BlazeMapSeedScreen extends Screen {
             renderSettingsButtonIcon(context);
 
             if (isNavigationMenuOpen) {
-                renderNavigationMenuLabels(context);
+                renderNavigationMenuLabels(context, mouseX, mouseY);
+            }
+            if (contextMenu != null) {
+                contextMenu.render(context, mouseX, mouseY);
             }
         } finally {
             metrics.addRenderNanos(System.nanoTime() - renderStart);
@@ -305,18 +347,48 @@ public class BlazeMapSeedScreen extends Screen {
         Screen.renderBackgroundTexture(context, MENU_BACKGROUND_TEXTURE, 0, 0, 0.0F, 0.0F, width, height);
     }
 
-    private void renderNavigationMenuLabels(DrawContext context) {
-        int panelLeft = travelOriginButton.getX() - 8;
-        int panelTop = travelOriginButton.getY() - 6;
-        int panelRight = travelGoButton.getX() + travelGoButton.getWidth() + 8;
-        int panelBottom = travelGoButton.getY() + travelGoButton.getHeight() + 6;
+    private void renderNavigationMenuLabels(DrawContext context, int mouseX, int mouseY) {
+        int panelLeft = navPanelLeft;
+        int panelTop = navPanelTop;
+        int panelRight = navPanelRight;
+        int panelBottom = navPanelBottom;
 
-        // Subtle panel background behind the menu controls.
-        context.fill(panelLeft, panelTop, panelRight, panelBottom, 0xD0222730);
-        context.drawBorder(panelLeft, panelTop, panelRight - panelLeft, panelBottom - panelTop, 0xFF5B6470);
+        // Panel background styled like the context menu for a native look.
+        context.fill(panelLeft, panelTop, panelRight, panelBottom, 0xEE000000);
+        context.drawBorder(panelLeft, panelTop, panelRight - panelLeft, panelBottom - panelTop, 0xFF666666);
 
-        String xLabel = "X:";
-        String zLabel = "Z:";
+        // Draw custom button rows so navigation matches right-click menu styling.
+        int originBg = isPointInRect(mouseX, mouseY,
+            travelOriginButton.getX(), travelOriginButton.getY(),
+            travelOriginButton.getWidth(), travelOriginButton.getHeight()) ? 0x334C6A8A : 0x22111111;
+        int goBg = isPointInRect(mouseX, mouseY,
+            travelGoButton.getX(), travelGoButton.getY(),
+            travelGoButton.getWidth(), travelGoButton.getHeight()) ? 0x334C6A8A : 0x22111111;
+
+        context.fill(travelOriginButton.getX(), travelOriginButton.getY(),
+            travelOriginButton.getX() + travelOriginButton.getWidth(),
+            travelOriginButton.getY() + travelOriginButton.getHeight(), originBg);
+        context.drawBorder(travelOriginButton.getX(), travelOriginButton.getY(),
+            travelOriginButton.getWidth(), travelOriginButton.getHeight(), 0xFF666666);
+
+        context.fill(travelGoButton.getX(), travelGoButton.getY(),
+            travelGoButton.getX() + travelGoButton.getWidth(),
+            travelGoButton.getY() + travelGoButton.getHeight(), goBg);
+        context.drawBorder(travelGoButton.getX(), travelGoButton.getY(),
+            travelGoButton.getWidth(), travelGoButton.getHeight(), 0xFF666666);
+
+        String originText = Text.translatable("cubeium.ui.origin").getString();
+        int originTextX = travelOriginButton.getX() + (travelOriginButton.getWidth() - textRenderer.getWidth(originText)) / 2;
+        int originTextY = travelOriginButton.getY() + (travelOriginButton.getHeight() - textRenderer.fontHeight) / 2;
+        context.drawText(textRenderer, originText, originTextX, originTextY, 0xFFE0E0E0, false);
+
+        String goText = Text.translatable("cubeium.ui.go").getString();
+        int goTextX = travelGoButton.getX() + (travelGoButton.getWidth() - textRenderer.getWidth(goText)) / 2;
+        int goTextY = travelGoButton.getY() + (travelGoButton.getHeight() - textRenderer.fontHeight) / 2;
+        context.drawText(textRenderer, goText, goTextX, goTextY, 0xFFE0E0E0, false);
+
+        String xLabel = Text.translatable("cubeium.ui.label_x").getString();
+        String zLabel = Text.translatable("cubeium.ui.label_z").getString();
         int xLabelY = travelXInput.getY() + 6;
         int zLabelY = travelZInput.getY() + 6;
         int xLabelX = travelXInput.getX() - textRenderer.getWidth(xLabel) - 6;
@@ -366,6 +438,11 @@ public class BlazeMapSeedScreen extends Screen {
         travelZInput.setHeight(20);
 
         travelGoButton.setDimensionsAndPosition(goWidth, 20, travelZInput.getX() + fieldWidth + fieldGap, row2Y);
+
+        navPanelLeft = travelOriginButton.getX() - 8;
+        navPanelTop = travelOriginButton.getY() - 6;
+        navPanelRight = travelGoButton.getX() + travelGoButton.getWidth() + 8;
+        navPanelBottom = travelGoButton.getY() + travelGoButton.getHeight() + 6;
     }
 
     private void toggleNavigationMenu() {
@@ -387,6 +464,8 @@ public class BlazeMapSeedScreen extends Screen {
         if (travelOriginButton != null) {
             travelOriginButton.visible = isNavigationMenuOpen;
             travelOriginButton.active = isNavigationMenuOpen;
+            travelOriginButton.setMessage(Text.empty());
+            travelOriginButton.setAlpha(0.0f);
         }
         if (travelXInput != null) {
             travelXInput.visible = isNavigationMenuOpen;
@@ -399,6 +478,8 @@ public class BlazeMapSeedScreen extends Screen {
         if (travelGoButton != null) {
             travelGoButton.visible = isNavigationMenuOpen;
             travelGoButton.active = isNavigationMenuOpen;
+            travelGoButton.setMessage(Text.empty());
+            travelGoButton.setAlpha(0.0f);
         }
     }
 
@@ -433,7 +514,9 @@ public class BlazeMapSeedScreen extends Screen {
         context.drawBorder(mapX, mapY, mapWidth, mapHeight, 0xFF404040);
 
         if (!mapGenerated || mapCache == null || tileRenderer == null) {
-            String message = hasValidSeed ? "Generating map..." : "Enter a seed to start";
+            String message = hasValidSeed
+                ? Text.translatable("cubeium.ui.generating_map").getString()
+                : Text.translatable("cubeium.ui.enter_seed_to_start").getString();
             int messageWidth = textRenderer.getWidth(message);
             context.drawText(textRenderer, message, 
                 mapX + (mapWidth - messageWidth) / 2,
@@ -441,9 +524,9 @@ public class BlazeMapSeedScreen extends Screen {
             return;
         }
         
-        tileRenderer.renderMap(context, currentSeed,
+            tileRenderer.renderMap(context, currentSeed,
             mapX + 1, mapY + 1, mapWidth - 2, mapHeight - 2,
-            mapCenterX, mapCenterZ, zoomLevel);
+            mapCenterX, mapCenterZ, zoomLevel, session);
         
     // Loading progress overlay removed per UI cleanup
         
@@ -462,7 +545,7 @@ public class BlazeMapSeedScreen extends Screen {
         // Render map markers (before tooltips so markers appear under text)
         if (markerRenderer != null && mapGenerated && hasValidSeed) {
             markerRenderer.renderMarkers(context, session.markers, mapX, mapY, mapWidth, mapHeight,
-                                        mapCenterX, mapCenterZ, zoomLevel);
+                                        mapCenterX, mapCenterZ, zoomLevel, session.showMarkerLabels);
         }
         
         // Coordinate + biome info box — always shown in top-right corner of map
@@ -569,13 +652,124 @@ public class BlazeMapSeedScreen extends Screen {
         }
     }
 
+    private void openBiomeFilter() {
+        if (client != null) {
+            client.setScreen(new BiomeFilterScreen(this, session));
+        }
+    }
+
+    private void openContextMenu(int mouseX, int mouseY) {
+        // Build a small vanilla-style context menu
+        java.util.List<ContextMenu.Item> items = new java.util.ArrayList<>();
+        final int cx = hoverSample.valid ? hoverSample.worldX : lastInfoWorldX;
+        final int cz = hoverSample.valid ? hoverSample.worldZ : lastInfoWorldZ;
+        items.add(new ContextMenu.Item(Text.translatable("cubeium.menu.coordinates_line", cx, cz), null, 0xFFFFFF66));
+        items.add(new ContextMenu.Item(Text.translatable("cubeium.menu.copy"), () -> {
+            String coords = String.format("%d %d", cx, cz);
+            if (client != null) client.keyboard.setClipboard(coords);
+        }, 0xFFE0E0E0));
+        // Copy /tp command (only if enabled in settings)
+        if (session.enableTeleportInContextMenu) {
+            items.add(new ContextMenu.Item(Text.translatable("cubeium.menu.teleport"), () -> {
+                String cmd = String.format("tp %d ~ %d", cx, cz);
+                try {
+                    if (client != null && client.getNetworkHandler() != null) {
+                        client.getNetworkHandler().sendCommand(cmd);
+                    }
+                } catch (Exception ignored) {
+                }
+            }, 0xFFE0E0E0));
+        }
+
+        contextMenu = new ContextMenu(mouseX, mouseY, items);
+    }
+
+    /**
+     * Small vanilla-like context menu renderer
+     */
+    private static final class ContextMenu {
+        static final class Item {
+            final Text text;
+            final Runnable action;
+            final int color;
+            Item(Text text, Runnable action, int color) {
+                this.text = text;
+                this.action = action;
+                this.color = color;
+            }
+        }
+
+        final int x, y;
+        final java.util.List<Item> items;
+        final int width, height;
+        private final int padX = 4;
+        private final int padTop = 4;
+        private final int padBottom = 1;
+        private final int rowHeight;
+        private final int textYInset;
+
+        ContextMenu(int x, int y, java.util.List<Item> items) {
+            this.x = x;
+            this.y = y;
+            this.items = items;
+            int fontHeight = MinecraftClient.getInstance().textRenderer.fontHeight;
+            this.rowHeight = fontHeight + 4;
+            this.textYInset = (rowHeight - fontHeight) / 2;
+            int w = 0;
+            for (Item it : items) w = Math.max(w, MinecraftClient.getInstance().textRenderer.getWidth(it.text.getString()));
+            this.width = w + (padX * 2);
+            this.height = items.size() * rowHeight + padTop + padBottom;
+        }
+
+        void render(DrawContext ctx, int mouseX, int mouseY) {
+            int left = x;
+            int top = y;
+            ctx.fill(left, top, left + width, top + height, 0xEE000000);
+            ctx.drawBorder(left, top, width, height, 0xFF666666);
+            int ty = top + padTop;
+            for (Item it : items) {
+                boolean hovered = it.action != null
+                    && mouseX >= left + 1
+                    && mouseX < left + width - 1
+                    && mouseY >= ty
+                    && mouseY < ty + rowHeight;
+                if (it.action != null) {
+                    ctx.fill(left + 1, ty, left + width - 1, ty + rowHeight, hovered ? 0x554C6A8A : 0x22111111);
+                    ctx.drawBorder(left + 1, ty, width - 2, rowHeight, hovered ? 0xFF89A9CF : 0xFF666666);
+                }
+                ctx.drawText(MinecraftClient.getInstance().textRenderer, it.text.getString(), left + padX, ty + textYInset, it.color, false);
+                ty += rowHeight;
+            }
+        }
+
+        boolean onClick(int mouseX, int mouseY, int button) {
+            if (button != 1 && button != 0) return false; // accept left or right to select
+            int left = x;
+            int top = y;
+            if (mouseX < left || mouseX > left + width || mouseY < top || mouseY > top + height) return false;
+            int idx = (mouseY - top - padTop) / rowHeight;
+            if (idx >= 0 && idx < items.size()) {
+                Item item = items.get(idx);
+                if (item.action != null) {
+                    try { item.action.run(); } catch (Exception ignored) {}
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    private boolean isPointInRect(int x, int y, int left, int top, int width, int height) {
+        return x >= left && x < left + width && y >= top && y < top + height;
+    }
+
     /**
      * Render performance overlay
      */
     private void renderPerformanceOverlay(DrawContext context) {
         RenderMetrics.Snapshot snapshot = RenderMetrics.get().snapshot();
 
-        context.drawText(textRenderer, "CubeiumMetrics", mapX + 5, mapY + mapHeight - 63, 0xFFFFFF00, true);
+        context.drawText(textRenderer, Text.translatable("cubeium.ui.metrics_title").getString(), mapX + 5, mapY + mapHeight - 63, 0xFFFFFF00, true);
 
         String perf = String.format("Center: %d, %d | View: %dx%d blocks", 
                                    mapCenterX, mapCenterZ, 
@@ -735,14 +929,29 @@ public class BlazeMapSeedScreen extends Screen {
         if (super.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
-        
-        // Handle map clicks
+
+        // If a context menu is open, let it handle clicks
+        if (contextMenu != null) {
+            if (contextMenu.onClick((int) mouseX, (int) mouseY, button)) {
+                contextMenu = null; // dismiss after handling
+                return true;
+            }
+        }
+
+        // Handle map left-click dragging
         if (isMouseOverMap((int) mouseX, (int) mouseY) && button == 0) {
+            contextMenu = null;
             isDragging = true;
             mouseSmoother.reset();
             return true;
         }
-        
+
+        // Right-click on map: open context menu (button 1)
+        if (isMouseOverMap((int) mouseX, (int) mouseY) && button == 1) {
+            openContextMenu((int) mouseX, (int) mouseY);
+            return true;
+        }
+
         return false;
     }
     
@@ -766,6 +975,7 @@ public class BlazeMapSeedScreen extends Screen {
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
         if (button == 0 && isDragging) {
+            contextMenu = null;
             // Fixed dragging to use SeedMapScreen approach with integer coordinates
             mouseSmoother.addMovement(-deltaX * zoomLevel, -deltaY * zoomLevel);
             mapCenterX += (int) mouseSmoother.movementX();
@@ -796,6 +1006,7 @@ public class BlazeMapSeedScreen extends Screen {
     private static SeedMapSession getOrCreateSession() {
         if (sharedSession == null) {
             sharedSession = new SeedMapSession();
+            loadPersistentSettings(sharedSession);
         }
         return sharedSession;
     }
@@ -811,6 +1022,81 @@ public class BlazeMapSeedScreen extends Screen {
         if (seedInput != null) {
             session.seedInputText = seedInput.getText();
         }
+        savePersistentSettings(session);
+    }
+
+    static void savePersistentSettings(SeedMapSession session) {
+        try {
+            JsonObject root = new JsonObject();
+            root.addProperty("showPerformanceInfo", session.showPerformanceInfo);
+            root.addProperty("showFloatingTooltip", session.showFloatingTooltip);
+            root.addProperty("enableTeleportInContextMenu", session.enableTeleportInContextMenu);
+            root.addProperty("showMarkerLabels", session.showMarkerLabels);
+            root.addProperty("preservePanOnOpen", session.preservePanOnOpen);
+            root.addProperty("biomeFilteringEnabled", session.biomeFilteringEnabled);
+
+            JsonArray selectedBiomeIds = new JsonArray();
+            for (Integer biomeId : session.selectedBiomeIds) {
+                selectedBiomeIds.add(biomeId);
+            }
+            root.add("selectedBiomeIds", selectedBiomeIds);
+
+            Path settingsPath = getSettingsPath();
+            Files.createDirectories(settingsPath.getParent());
+            Files.writeString(settingsPath, GSON.toJson(root), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            Cubeium.LOGGER.warn("[BlazeMapSeedScreen] Failed to save settings", e);
+        }
+    }
+
+    private static void loadPersistentSettings(SeedMapSession session) {
+        try {
+            Path settingsPath = getSettingsPath();
+            if (!Files.exists(settingsPath)) {
+                return;
+            }
+
+            String raw = Files.readString(settingsPath, StandardCharsets.UTF_8);
+            JsonObject root = GSON.fromJson(raw, JsonObject.class);
+            if (root == null) {
+                return;
+            }
+
+            if (root.has("showPerformanceInfo")) {
+                session.showPerformanceInfo = root.get("showPerformanceInfo").getAsBoolean();
+            }
+            if (root.has("showFloatingTooltip")) {
+                session.showFloatingTooltip = root.get("showFloatingTooltip").getAsBoolean();
+            }
+            if (root.has("enableTeleportInContextMenu")) {
+                session.enableTeleportInContextMenu = root.get("enableTeleportInContextMenu").getAsBoolean();
+            }
+            if (root.has("showMarkerLabels")) {
+                session.showMarkerLabels = root.get("showMarkerLabels").getAsBoolean();
+            }
+            if (root.has("preservePanOnOpen")) {
+                session.preservePanOnOpen = root.get("preservePanOnOpen").getAsBoolean();
+            }
+            if (root.has("biomeFilteringEnabled")) {
+                session.biomeFilteringEnabled = root.get("biomeFilteringEnabled").getAsBoolean();
+            }
+            if (root.has("selectedBiomeIds") && root.get("selectedBiomeIds").isJsonArray()) {
+                session.selectedBiomeIds.clear();
+                JsonArray selectedBiomeIds = root.getAsJsonArray("selectedBiomeIds");
+                for (int i = 0; i < selectedBiomeIds.size(); i++) {
+                    try {
+                        session.selectedBiomeIds.add(selectedBiomeIds.get(i).getAsInt());
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Cubeium.LOGGER.warn("[BlazeMapSeedScreen] Failed to load settings", e);
+        }
+    }
+
+    private static Path getSettingsPath() {
+        return FabricLoader.getInstance().getConfigDir().resolve(SETTINGS_FILE_NAME);
     }
 
     public static final class SeedMapSession {
@@ -828,7 +1114,54 @@ public class BlazeMapSeedScreen extends Screen {
         long lastGeneratedSeed = Long.MIN_VALUE;
         boolean showPerformanceInfo = false;
         boolean showFloatingTooltip = false;
+        boolean enableTeleportInContextMenu = false;
+        boolean showMarkerLabels = false;
+        boolean preservePanOnOpen = false;
+        boolean biomeFilteringEnabled = false;
+        final java.util.LinkedHashSet<Integer> selectedBiomeIds = new java.util.LinkedHashSet<>();
         String seedInputText = "";
+
+        public boolean isBiomeVisible(int biomeId) {
+            return !biomeFilteringEnabled || selectedBiomeIds.contains(biomeId);
+        }
+
+        public int getSelectedBiomeCount() {
+            return selectedBiomeIds.size();
+        }
+
+        public void selectAllBiomes(java.util.List<BiomeFilterCatalog.BiomeEntry> biomes) {
+            selectedBiomeIds.clear();
+            for (BiomeFilterCatalog.BiomeEntry biome : biomes) {
+                selectedBiomeIds.add(biome.id());
+            }
+        }
+
+        public void clearBiomes() {
+            selectedBiomeIds.clear();
+        }
+
+        public void invertBiomes(java.util.List<BiomeFilterCatalog.BiomeEntry> biomes) {
+            java.util.LinkedHashSet<Integer> inverted = new java.util.LinkedHashSet<>();
+            for (BiomeFilterCatalog.BiomeEntry biome : biomes) {
+                if (!selectedBiomeIds.contains(biome.id())) {
+                    inverted.add(biome.id());
+                }
+            }
+            selectedBiomeIds.clear();
+            selectedBiomeIds.addAll(inverted);
+        }
+
+        public void setBiomeSelected(int biomeId, boolean selected) {
+            if (selected) {
+                selectedBiomeIds.add(biomeId);
+            } else {
+                selectedBiomeIds.remove(biomeId);
+            }
+        }
+
+        public boolean isBiomeSelected(int biomeId) {
+            return selectedBiomeIds.contains(biomeId);
+        }
 
         SeedMapSession() {
             biomeGenerator = new BiomeGenerator();
@@ -836,6 +1169,7 @@ public class BlazeMapSeedScreen extends Screen {
             tileRenderer = new MapTileRenderer(mapCache);
         }
     }
+
 
     private static final class HoverSample {
         int worldX;

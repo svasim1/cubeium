@@ -46,19 +46,20 @@ public class MarkerRenderer {
      */
     public void renderMarkers(DrawContext context, List<MapMarker> markers,
                               int mapX, int mapY, int mapWidth, int mapHeight,
-                              int mapCenterX, int mapCenterZ, int zoomLevel) {
+                              int mapCenterX, int mapCenterZ, int zoomLevel,
+                              boolean showLabels) {
         if (markers == null || markers.isEmpty()) {
             return;
         }
 
         for (MapMarker marker : markers) {
             if (!marker.visible) continue;
-            renderMarker(context, marker, mapX, mapY, mapWidth, mapHeight, mapCenterX, mapCenterZ, zoomLevel);
+            renderMarker(context, marker, mapX, mapY, mapWidth, mapHeight, mapCenterX, mapCenterZ, zoomLevel, showLabels);
         }
     }
 
     private void renderMarker(DrawContext context, MapMarker marker, int mapX, int mapY, int mapWidth, int mapHeight,
-                             int mapCenterX, int mapCenterZ, int zoomLevel) {
+                             int mapCenterX, int mapCenterZ, int zoomLevel, boolean showLabels) {
         // Convert world coordinates to screen coordinates
         ScreenPos screenPos = worldToScreen(marker.worldX, marker.worldZ,
                                            mapX, mapY, mapWidth, mapHeight,
@@ -77,7 +78,7 @@ public class MarkerRenderer {
         }
 
         // Optional: Draw label below marker
-        if (marker.label != null && !marker.label.isEmpty() && !marker.label.equals(marker.type.toString())) {
+        if (showLabels && marker.label != null && !marker.label.isEmpty() && !marker.label.equals(marker.type.toString())) {
             drawMarkerLabel(context, marker.label, screenPos.x, screenPos.y + iconSize / 2 + 4);
         }
     }
