@@ -122,7 +122,7 @@
             int panelTop = listTop - LIST_PANEL_PADDING;
             int panelRight = listLeft + listWidth + LIST_PANEL_PADDING;
             int panelBottom = listTop + listHeight + LIST_PANEL_PADDING;
-            context.fill(panelLeft, panelTop, panelRight, panelBottom, 0xEE101010);
+            context.fill(panelLeft, panelTop, panelRight, panelBottom, 0xFF101010);
             context.drawBorder(panelLeft, panelTop, panelRight - panelLeft, panelBottom - panelTop, 0xFF5A5A5A);
 
             context.enableScissor(listLeft, listTop, listLeft + listWidth, listTop + listHeight);
@@ -176,7 +176,7 @@
 
         private void drawCategoryCard(DrawContext context, int mouseX, int mouseY, int cardX, int cardY, int cardWidth, CubeiumBiomeFilterCatalog.BiomeGroup group) {
             int cardHeight = CARD_PADDING * 2 + CARD_TITLE_HEIGHT + group.entries().size() * ENTRY_HEIGHT;
-            context.fill(cardX, cardY, cardX + cardWidth, cardY + cardHeight, 0xEE111111);
+            context.fill(cardX, cardY, cardX + cardWidth, cardY + cardHeight, 0xFF111111);
             context.drawBorder(cardX, cardY, cardWidth, cardHeight, 0xFF5A5A5A);
 
             context.fill(cardX + 1, cardY + 1, cardX + cardWidth - 1, cardY + CARD_PADDING + CARD_TITLE_HEIGHT, 0xFF1A1A1A);
@@ -187,7 +187,7 @@
                 boolean selected = session.isBiomeSelected(biome.id());
                 boolean hovered = mouseX >= cardX + 2 && mouseX < cardX + cardWidth - 2 && mouseY >= entryTop && mouseY < entryTop + ENTRY_HEIGHT;
 
-                context.fill(cardX + 2, entryTop, cardX + cardWidth - 2, entryTop + ENTRY_HEIGHT, hovered ? 0x334C6A8A : 0x22111111);
+                context.fill(cardX + 2, entryTop, cardX + cardWidth - 2, entryTop + ENTRY_HEIGHT, hovered ? 0xFF4C6A8A : 0xFF111111);
                 context.drawBorder(cardX + 2, entryTop, cardWidth - 4, ENTRY_HEIGHT, hovered ? 0xFF89A9CF : 0xFF444444);
 
                 int checkboxSize = 10;
