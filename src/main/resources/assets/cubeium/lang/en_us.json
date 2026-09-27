@@ -15,7 +15,8 @@
   "cubeium.menu.coordinates_line": "X: %s  Z: %s",
 
   "cubeium.ui.seed": "Seed",
-  "cubeium.ui.seed_placeholder": "Enter seed or leave empty for random",
+  "cubeium.ui.seed_placeholder": "Enter a seed",
+  "cubeium.ui.seed_value": "Seed: %s",
   "cubeium.ui.generating_map": "Generating map...",
   "cubeium.ui.enter_seed_to_start": "Enter a seed to start",
   "cubeium.ui.metrics_title": "CubeiumMetrics",

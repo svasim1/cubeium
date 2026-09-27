@@ -48,3 +48,5 @@ replay_*.log
 /cubiomes/
 /amidst/
 cubiomes-viewer/
+# Logs written by local test runs
+/logs/
