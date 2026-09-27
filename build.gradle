@@ -25,6 +25,16 @@ loom {
 	}
 }
 
+// In-game tests (src/gametest): ./gradlew runClientGameTest launches the real client.
+fabricApi {
+	configureTests {
+		createSourceSet = true
+		modId = "cubeium-gametest"
+		enableGameTests = false
+		enableClientGameTests = true
+	}
+}
+
 dependencies {
 	// To change the versions see the gradle.properties file
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"

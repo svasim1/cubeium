@@ -1,0 +1,15 @@
+{
+	"schemaVersion": 1,
+	"id": "cubeium-gametest",
+	"version": "1.0.0",
+	"name": "Cubeium Game Tests",
+	"environment": "client",
+	"entrypoints": {
+		"fabric-client-gametest": [
+			"cubeium.cubeium.gametest.CubeiumClientGameTest"
+		]
+	},
+	"depends": {
+		"cubeium": "*"
+	}
+}
