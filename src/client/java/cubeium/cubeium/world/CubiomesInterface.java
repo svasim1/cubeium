@@ -1,286 +1,183 @@
 package cubeium.cubeium.world;
 
-import cubeium.cubeium.Cubeium;
-
 /**
- * JNI interface to the cubiomes C library for Minecraft world generation.
- * This class provides native methods to interface with the cubiomes library
- * for calculating biomes, structures, and other world generation features.
+ * JNI bindings to the cubiomes C library (native/cubiomes, bridged by native/cubeium_jni.c).
+ *
+ * <p>The constants below mirror cubiomes' C enums. They are compile-time checked:
+ * cubeium_jni.c static-asserts every constant against the C enum value, so a
+ * mismatch fails the native build instead of silently producing a wrong map.
+ *
+ * <p>A generator handle is not thread-safe (some calls temporarily modify it);
+ * use one handle per thread.
  */
-public class CubiomesInterface {
-    
-    // Static initialization block to load the native library
+public final class CubiomesInterface {
+
     static {
-        loadNativeLibrary();
+        NativeLibraryLoader.load();
     }
-    
-    /**
-     * Loads the appropriate native library for the current platform
-     */
-    private static void loadNativeLibrary() {
-        String osName = System.getProperty("os.name").toLowerCase();
-        String arch = System.getProperty("os.arch").toLowerCase();
-        
-        // Determine platform-specific library name
-        String platformName;
-        
-        if (osName.contains("windows")) {
-            platformName = "windows";
-        } else if (osName.contains("linux")) {
-            platformName = "linux";
-        } else if (osName.contains("mac") || osName.contains("darwin")) {
-            platformName = "macos";
-        } else {
-            throw new UnsupportedOperationException("Unsupported operating system: " + osName);
-        }
-        
-        // Determine architecture
-        String archName;
-        if (arch.contains("amd64") || arch.contains("x86_64")) {
-            archName = "x64";
-        } else if (arch.contains("aarch64") || arch.contains("arm64")) {
-            archName = "arm64";
-        } else if (arch.contains("x86") || arch.contains("i386")) {
-            archName = "x86";
-        } else {
-            archName = arch;
-        }
-        
-        // Construct library path and filename
-        String libraryFileName;
-        if (platformName.equals("windows")) {
-            libraryFileName = "libcubiomes.dll";  // CMake generates libcubiomes.dll on Windows
-        } else if (platformName.equals("macos")) {
-            libraryFileName = "libcubiomes.dylib";
-        } else {
-            libraryFileName = "libcubiomes.so";
-        }
-        
-        String libraryPath = "/natives/" + platformName + "/" + archName + "/" + libraryFileName;
-        
-        try {
-            // Try to load from resources first
-            NativeLibraryLoader.loadLibraryFromResources("cubiomes", libraryPath);
-            Cubeium.LOGGER.info("Successfully loaded cubiomes native library from: " + libraryPath);
-        } catch (Exception e) {
-            Cubeium.LOGGER.error("Failed to load cubiomes native library from: " + libraryPath, e);
-            
-            // Fallback: try system library path
-            try {
-                System.loadLibrary("cubiomes");
-                Cubeium.LOGGER.info("Successfully loaded cubiomes from system library path");
-            } catch (Exception e2) {
-                Cubeium.LOGGER.error("Failed to load cubiomes from system library path", e2);
-                throw new RuntimeException("Cannot load cubiomes native library", e2);
-            }
-        }
+
+    private CubiomesInterface() {
     }
-    
+
     // ========================================
-    // Generator Management
+    // Generator management
     // ========================================
-    
-    /**
-     * Initialize a new generator for the specified Minecraft version
-     * @param mcVersion Minecraft version (e.g., MC_1_21_4)
-     * @param flags Generator flags (0 for default)
-     * @return Generator handle (pointer as long)
-     */
-    public static native long setupGenerator(int mcVersion, long flags);
-    
-    /**
-     * Clean up and free a generator
-     * @param generator Generator handle
-     */
+
+    /** Allocates and initializes a generator. Free it with {@link #freeGenerator}. */
+    public static native long setupGenerator(int mcVersion, int flags);
+
     public static native void freeGenerator(long generator);
-    
-    /**
-     * Apply a seed to the generator
-     * @param generator Generator handle
-     * @param dimension Dimension (0 = Overworld, -1 = Nether, 1 = End)
-     * @param seed World seed
-     */
+
+    /** Applies a world seed for a dimension ({@link #DIM_OVERWORLD}, {@link #DIM_NETHER}, {@link #DIM_END}). */
     public static native void applySeed(long generator, int dimension, long seed);
-    
+
     // ========================================
-    // Biome Generation
+    // Biomes
     // ========================================
-    
+
     /**
-     * Get the biome at a specific coordinate
-     * @param generator Generator handle
-     * @param scale Scale factor (1 = block, 4 = biome coordinate)
-     * @param x X coordinate
-     * @param y Y coordinate  
-     * @param z Z coordinate
-     * @return Biome ID
+     * Biome at a position. Coordinates are in units of {@code scale}: scale 1 means
+     * block coordinates, scale 4 means biome coordinates (x/4, y/4, z/4).
      */
     public static native int getBiomeAt(long generator, int scale, int x, int y, int z);
-    
+
     /**
-     * Generate biomes for a rectangular area
-     * @param generator Generator handle
-     * @param scale Scale factor (1, 4, 16, 64, or 256)
-     * @param x Starting X coordinate
-     * @param z Starting Z coordinate
-     * @param y Y coordinate (height layer)
-     * @param width Width of the area
-     * @param height Height of the area
-     * @return Array of biome IDs (width * height elements)
+     * Biomes for a {@code width x height} area on one horizontal layer, row-major (z outer, x inner).
+     * x, z, y are in units of {@code scale} (1, 4, 16, 64 or 256).
      */
     public static native int[] genBiomes(long generator, int scale, int x, int z, int y, int width, int height);
-    
+
+    /** Version-specific biome id name, e.g. "windswept_hills", or null for an unknown id. */
+    public static native String getBiomeName(int mcVersion, int biomeId);
+
+    /** True if the biome id generates in the Overworld of the given version. */
+    public static native boolean isOverworldBiome(int mcVersion, int biomeId);
+
+    /** cubiomes' default biome palette: 256 entries of 0xAARRGGBB, indexed by biome id. */
+    public static native int[] getBiomeColors();
+
+    // ========================================
+    // Structures
+    // ========================================
+
     /**
-     * Generate biomes for a 3D volume
-     * @param generator Generator handle
-     * @param scale Scale factor
-     * @param x Starting X coordinate
-     * @param z Starting Z coordinate
-     * @param y Starting Y coordinate
-     * @param width Width of the volume
-     * @param height Height of the volume
-     * @param depth Depth of the volume
-     * @return Array of biome IDs (width * height * depth elements)
+     * Structure placement config for a version: {regionSize (chunks), chunkRange, dimension},
+     * or null if the structure does not exist in that version.
      */
-    public static native int[] genBiomes3D(long generator, int scale, int x, int z, int y, int width, int height, int depth);
-    
-    // ========================================
-    // Structure Generation
-    // ========================================
-    
+    public static native int[] getStructureConfig(int structureType, int mcVersion);
+
     /**
-     * Get the position of a structure in a region
-     * @param structureType Structure type ID
-     * @param mcVersion Minecraft version
-     * @param seed World seed (lower 48 bits)
-     * @param regionX Region X coordinate
-     * @param regionZ Region Z coordinate
-     * @return Array with [x, z] coordinates, or null if no structure
+     * Block position {x, z} of the generation attempt in a region, or null if the region has none.
+     * The attempt only becomes a structure if {@link #isViableStructurePos} also passes.
      */
     public static native int[] getStructurePos(int structureType, int mcVersion, long seed, int regionX, int regionZ);
-    
+
     /**
-     * Check if a structure can generate at the given position (biome check)
-     * @param structureType Structure type ID
-     * @param generator Generator handle
-     * @param x X coordinate
-     * @param z Z coordinate
-     * @param flags Additional flags
-     * @return True if structure is viable at this position
+     * Biome check for a generation attempt. The generator must be seeded for the structure's
+     * dimension. {@code flags} is structure-specific (e.g. village biome variant); pass 0 by default.
      */
     public static native boolean isViableStructurePos(int structureType, long generator, int x, int z, int flags);
-    
+
     /**
-     * Get stronghold positions
-     * @param generator Generator handle
-     * @param seed World seed
-     * @param maxCount Maximum number of strongholds to find
-     * @return Array of stronghold positions [x1, z1, x2, z2, ...]
+     * Accurate stronghold positions {x1, z1, x2, z2, ...}, nearest ring first.
+     * The generator must be seeded for the Overworld.
      */
-    public static native int[] getStrongholds(long generator, long seed, int maxCount);
-    
+    public static native int[] getStrongholds(long generator, int maxCount);
+
     /**
-     * Get spawn point for a world
-     * @param generator Generator handle
-     * @param seed World seed
-     * @return Array with [x, z] spawn coordinates
+     * World spawn {x, z}. The generator must be seeded for the Overworld.
+     * {@code exact} runs the full (slow) search; otherwise returns cubiomes' fast estimate.
      */
-    public static native int[] getSpawn(long generator, long seed);
-    
-    // ========================================
-    // Utility Methods
-    // ========================================
-    
-    /**
-     * Get the display name for a biome ID
-     * @param biomeId Biome ID
-     * @return Biome name string
-     */
-    public static native String getBiomeName(int biomeId);
-    
-    /**
-     * Get the display name for a structure type
-     * @param structureType Structure type ID
-     * @return Structure name string
-     */
+    public static native int[] getSpawn(long generator, boolean exact);
+
+    /** cubiomes' name for a structure type, e.g. "village", or null for an unknown type. */
     public static native String getStructureName(int structureType);
-    
-    /**
-     * Check if the native library is loaded and functional
-     * @return True if library is working
-     */
-    public static native boolean isLibraryLoaded();
-    
-    /**
-     * Get version information about the cubiomes library
-     * @return Version string
-     */
-    public static native String getLibraryVersion();
-    
+
     // ========================================
-    // Constants (from cubiomes)
+    // Constants (checked against cubiomes in cubeium_jni.c)
     // ========================================
-    
-    // Minecraft versions - CORRECTED to match cubiomes enum values
+
+    // enum MCVersion (biomes.h)
     public static final int MC_UNDEF = 0;
     public static final int MC_B1_7 = 1;
     public static final int MC_B1_8 = 2;
-    public static final int MC_1_0_0 = 3;   // MC_1_0
-    public static final int MC_1_1_0 = 4;   // MC_1_1
-    public static final int MC_1_2_5 = 5;   // MC_1_2
-    public static final int MC_1_3_2 = 6;   // MC_1_3
-    public static final int MC_1_4_7 = 7;   // MC_1_4
-    public static final int MC_1_5_2 = 8;   // MC_1_5
-    public static final int MC_1_6_4 = 9;   // MC_1_6
-    public static final int MC_1_7_10 = 10; // MC_1_7
-    public static final int MC_1_8_9 = 11;  // MC_1_8
-    public static final int MC_1_9_4 = 12;  // MC_1_9
-    public static final int MC_1_10_2 = 13; // MC_1_10
-    public static final int MC_1_11_2 = 14; // MC_1_11
-    public static final int MC_1_12_2 = 15; // MC_1_12
-    public static final int MC_1_13_2 = 16; // MC_1_13
-    public static final int MC_1_14_4 = 17; // MC_1_14
-    public static final int MC_1_15_2 = 18; // MC_1_15
+    public static final int MC_1_0 = 3;
+    public static final int MC_1_1 = 4;
+    public static final int MC_1_2 = 5;
+    public static final int MC_1_3 = 6;
+    public static final int MC_1_4 = 7;
+    public static final int MC_1_5 = 8;
+    public static final int MC_1_6 = 9;
+    public static final int MC_1_7 = 10;
+    public static final int MC_1_8 = 11;
+    public static final int MC_1_9 = 12;
+    public static final int MC_1_10 = 13;
+    public static final int MC_1_11 = 14;
+    public static final int MC_1_12 = 15;
+    public static final int MC_1_13 = 16;
+    public static final int MC_1_14 = 17;
+    public static final int MC_1_15 = 18;
     public static final int MC_1_16_1 = 19;
-    public static final int MC_1_16_5 = 20; // MC_1_16
-    public static final int MC_1_17_1 = 21; // MC_1_17 - CORRECTED!
-    public static final int MC_1_18_2 = 22; // MC_1_18
+    public static final int MC_1_16 = 20;
+    public static final int MC_1_17 = 21;
+    public static final int MC_1_18 = 22;
     public static final int MC_1_19_2 = 23;
-    public static final int MC_1_19_4 = 24; // MC_1_19
-    public static final int MC_1_20_6 = 25; // MC_1_20 - CORRECTED!
+    public static final int MC_1_19 = 24;
+    public static final int MC_1_20 = 25;
     public static final int MC_1_21_1 = 26;
     public static final int MC_1_21_3 = 27;
-    public static final int MC_1_21_WD = 28; // MC_1_21 - CORRECTED!
-    
-    // Convenient aliases
-    public static final int MC_1_17 = MC_1_17_1;
-    public static final int MC_1_20 = MC_1_20_6;
-    public static final int MC_1_21 = MC_1_21_WD;
-    
-    // Dimensions
-    public static final int DIM_OVERWORLD = 0;
+    public static final int MC_1_21_4 = 28;
+    public static final int MC_1_21_5 = 29;
+    public static final int MC_1_21_6 = 30;
+    public static final int MC_1_21_9 = 31;
+    public static final int MC_1_21_11 = 32;
+    public static final int MC_26_1 = 33;
+    public static final int MC_26_2 = 34;
+    public static final int MC_26_3 = 35;
+    public static final int MC_NEWEST = MC_26_3;
+
+    /** The cubiomes version matching the Minecraft version this build of the mod targets. */
+    public static final int GAME_MC_VERSION = MC_1_21_4;
+
+    // enum Dimension (biomes.h)
     public static final int DIM_NETHER = -1;
+    public static final int DIM_OVERWORLD = 0;
     public static final int DIM_END = 1;
-    
-    // Structure types (from cubiomes finders.h)
-    public static final int DESERT_PYRAMID = 0;
-    public static final int IGLOO = 1;
+
+    // Generator flags (generator.h)
+    public static final int LARGE_BIOMES = 0x1;
+    public static final int NO_BETA_OCEAN = 0x2;
+    public static final int FORCE_OCEAN_VARIANTS = 0x4;
+
+    // enum StructureType (finders.h)
+    public static final int FEATURE = 0;
+    public static final int DESERT_PYRAMID = 1;
     public static final int JUNGLE_TEMPLE = 2;
     public static final int SWAMP_HUT = 3;
-    public static final int OUTPOST = 4;
+    public static final int IGLOO = 4;
     public static final int VILLAGE = 5;
-    public static final int OCEAN_MONUMENT = 6;
-    public static final int WOODLAND_MANSION = 7;
-    public static final int STRONGHOLD = 8;
-    public static final int MINESHAFT = 9;
-    public static final int DUNGEON = 10;
-    public static final int END_CITY = 11;
-    public static final int END_GATEWAY = 12;
-    public static final int NETHER_FORTRESS = 13;
-    public static final int BASTION = 14;
-    public static final int RUINED_PORTAL = 15;
-    
-    // Generator flags
-    public static final long LARGE_BIOMES = 1L;
-    public static final long AMPLIFIED = 2L;
+    public static final int OCEAN_RUIN = 6;
+    public static final int SHIPWRECK = 7;
+    public static final int MONUMENT = 8;
+    public static final int MANSION = 9;
+    public static final int OUTPOST = 10;
+    public static final int RUINED_PORTAL = 11;
+    public static final int RUINED_PORTAL_NETHER = 12;
+    public static final int ANCIENT_CITY = 13;
+    public static final int TREASURE = 14;
+    public static final int MINESHAFT = 15;
+    public static final int DESERT_WELL = 16;
+    public static final int GEODE = 17;
+    public static final int FORTRESS = 18;
+    public static final int BASTION = 19;
+    public static final int NETHER_FOSSIL = 20;
+    public static final int END_CITY = 21;
+    public static final int END_GATEWAY = 22;
+    public static final int END_ISLAND = 23;
+    public static final int TRAIL_RUINS = 24;
+    public static final int TRIAL_CHAMBERS = 25;
+    public static final int ABANDONED_CAMP = 26;
+    /** Not placed via regions: use {@link #getStrongholds}. */
+    public static final int STRONGHOLD = 27;
+    public static final int FEATURE_NUM = 28;
 }

@@ -16,7 +16,7 @@ import cubeium.cubeium.world.CubiomesInterface;
  * Provides efficient biome data generation with caching and async processing.
  */
 public class BiomeGenerator {
-    private static final int DEFAULT_MC_VERSION = CubiomesInterface.MC_1_21;
+    private static final int DEFAULT_MC_VERSION = CubiomesInterface.GAME_MC_VERSION;
     private static final int CACHE_LIMIT = 10000; // Maximum cached regions
     
     // Generator state
@@ -68,7 +68,7 @@ public class BiomeGenerator {
             }
             
             try {
-                generatorHandle = CubiomesInterface.setupGenerator(mcVersion, worldFlags);
+                generatorHandle = CubiomesInterface.setupGenerator(mcVersion, (int) worldFlags);
                 if (generatorHandle == 0) {
                     throw new IllegalStateException("Failed to initialize cubiomes generator");
                 }
@@ -243,7 +243,7 @@ public class BiomeGenerator {
      */
     public String getBiomeName(int biomeId) {
         try {
-            return normalizeBiomeName(CubiomesInterface.getBiomeName(biomeId));
+            return normalizeBiomeName(CubiomesInterface.getBiomeName(mcVersion, biomeId));
         } catch (Exception e) {
             return "Unknown Biome (" + biomeId + ")";
         }
