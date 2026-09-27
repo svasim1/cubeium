@@ -217,7 +217,7 @@ final class MapWidget extends AbstractWidget {
 
     private List<Waypoint> drawWaypoints(GuiGraphicsExtractor graphics) {
         List<Waypoint> shown = new ArrayList<>();
-        if (session.worldKey == null) {
+        if (session.worldKey == null || !CubeiumConfig.get().showWaypoints) {
             return shown;
         }
         for (Waypoint waypoint : CubeiumConfig.get().waypoints(session.worldKey)) {
@@ -412,7 +412,9 @@ final class MapWidget extends AbstractWidget {
                 () -> Minecraft.getInstance().keyboardHandler.setClipboard(wx + " " + wz)));
         items.add(new ContextMenu.Item(Component.translatable("cubeium.menu.center"), () -> session.view.center(wx + 0.5, wz + 0.5)));
         List<Waypoint> waypoints = CubeiumConfig.get().waypoints(session.worldKey == null ? "none" : session.worldKey);
-        Waypoint near = waypointNear(waypoints.stream().filter(w -> session.dimension.key().equals(w.dimension)).toList(), x, y);
+        Waypoint near = CubeiumConfig.get().showWaypoints
+                ? waypointNear(waypoints.stream().filter(w -> session.dimension.key().equals(w.dimension)).toList(), x, y)
+                : null;
         if (near != null) {
             items.add(new ContextMenu.Item(Component.translatable("cubeium.menu.remove_waypoint", near.name), () -> {
                 waypoints.remove(near);
@@ -423,6 +425,7 @@ final class MapWidget extends AbstractWidget {
             items.add(new ContextMenu.Item(Component.translatable("cubeium.menu.add_waypoint"), () -> {
                 String name = Component.translatable("cubeium.waypoints.default_name", waypoints.size() + 1).getString();
                 waypoints.add(new Waypoint(name, wx, wz, session.dimension.key(), waypoints.size()));
+                CubeiumConfig.get().showWaypoints = true; // a new waypoint should be visible
                 CubeiumConfig.get().save();
                 onWaypointsChanged.run();
             }));

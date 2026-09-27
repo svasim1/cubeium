@@ -2,21 +2,22 @@ package cubeium.cubeium.screen;
 
 import cubeium.cubeium.config.CubeiumConfig;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.resources.Identifier;
 
 /**
- * The classic menu look: the dirt block texture, darkened. This is how the options background
- * was drawn before 1.20.5 (dirt tinted 0x404040 for screens, 0x202020 for lists), using the
- * game's own texture rather than a bundled copy.
+ * The classic menu look: a block texture, darkened. This is how the options background was drawn
+ * before 1.20.5 (dirt tinted 0x404040 for screens, 0x202020 for lists), using the game's own
+ * textures rather than bundled copies. Dark mode swaps dirt for deepslate.
  */
 final class Backgrounds {
     private static final Identifier DIRT = Identifier.withDefaultNamespace("textures/block/dirt.png");
+    private static final Identifier DEEPSLATE = Identifier.withDefaultNamespace("textures/block/deepslate.png");
     private static final int SCREEN_TINT = 0xFF404040;
     private static final int PANEL_TINT = 0xFF202020;
-    private static final int DARK_SCREEN_TINT = 0xFF1C1C1C;
-    private static final int DARK_PANEL_TINT = 0xFF101010;
+    /** Deepslate is darker than dirt, so it takes a lighter tint for a similar brightness. */
+    private static final int DARK_SCREEN_TINT = 0xFF707070;
+    private static final int DARK_PANEL_TINT = 0xFF383838;
     /** A 16 px texture drawn over 32 GUI pixels, as vanilla did. */
     private static final int TILE = 32;
 
@@ -24,19 +25,18 @@ final class Backgrounds {
     }
 
     static void screen(GuiGraphicsExtractor graphics, int width, int height) {
-        dirt(graphics, 0, 0, width, height, CubeiumConfig.get().darkMode ? DARK_SCREEN_TINT : SCREEN_TINT);
+        boolean dark = CubeiumConfig.get().darkMode;
+        draw(graphics, 0, 0, width, height, dark ? DARK_SCREEN_TINT : SCREEN_TINT);
     }
 
     static void panelFill(GuiGraphicsExtractor graphics, int x0, int y0, int x1, int y1) {
-        dirt(graphics, x0, y0, x1 - x0, y1 - y0, panelTint());
+        boolean dark = CubeiumConfig.get().darkMode;
+        draw(graphics, x0, y0, x1 - x0, y1 - y0, dark ? DARK_PANEL_TINT : PANEL_TINT);
     }
 
-    private static int panelTint() {
-        return CubeiumConfig.get().darkMode ? DARK_PANEL_TINT : PANEL_TINT;
-    }
-
-    private static void dirt(GuiGraphicsExtractor graphics, int x, int y, int width, int height, int tint) {
+    private static void draw(GuiGraphicsExtractor graphics, int x, int y, int width, int height, int tint) {
+        Identifier texture = CubeiumConfig.get().darkMode ? DEEPSLATE : DIRT;
         // u/v follow the screen position so neighbouring areas line up seamlessly.
-        graphics.blit(RenderPipelines.GUI_TEXTURED, DIRT, x, y, x, y, width, height, TILE, TILE, tint);
+        graphics.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, x, y, width, height, TILE, TILE, tint);
     }
 }

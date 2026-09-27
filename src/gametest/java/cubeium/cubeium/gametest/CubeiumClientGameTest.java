@@ -463,6 +463,12 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
         click(context, "cubeium.tab.waypoints");
         context.waitTicks(10);
         context.takeScreenshot("cubeium-waypoints");
+        click(context, "cubeium.waypoints.show");
+        context.waitTicks(5);
+        if (context.computeOnClient(client -> CubeiumConfig.get().showWaypoints)) {
+            throw new AssertionError("Show Waypoints did not turn off");
+        }
+        context.takeScreenshot("cubeium-waypoints-hidden");
 
         click(context, "cubeium.tab.map");
         context.waitTicks(5);
@@ -483,6 +489,13 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
         click(context, "cubeium.map.collapse_panel");
         context.waitTicks(40);
         context.takeScreenshot("cubeium-panel-collapsed");
+        // Any tab, not only Map, must bring the panel back.
+        click(context, "cubeium.tab.biomes");
+        context.waitTicks(10);
+        if (context.computeOnClient(client -> CubeiumConfig.get().panelCollapsed)) {
+            throw new AssertionError("clicking the Biomes tab did not expand the panel");
+        }
+        context.takeScreenshot("cubeium-panel-reopened");
         context.getInput().pressKey(InputConstants.KEY_ESCAPE);
         context.waitTicks(5);
         context.setScreen(() -> null);
