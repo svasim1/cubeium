@@ -40,7 +40,6 @@ public final class CubeiumConfig {
     public boolean coordinateAxes = true;
     public boolean panelCollapsed = false;
     public boolean slimeChunks = false;
-    public boolean showWaypoints = true;
 
     /** Enabled structures, by {@link StructureKind#key()}. */
     public Set<String> structures = new LinkedHashSet<>(defaultStructures());
@@ -121,7 +120,7 @@ public final class CubeiumConfig {
         Set<String> keys = new LinkedHashSet<>();
         for (StructureKind kind : StructureKind.values()) {
             // Off by default: so common they would bury the map in icons.
-            boolean noisy = kind.isDense() || kind == StructureKind.RUINED_PORTAL || kind == StructureKind.RUINED_PORTAL_NETHER
+            boolean noisy = kind == StructureKind.MINESHAFT || kind == StructureKind.BURIED_TREASURE || kind == StructureKind.RUINED_PORTAL || kind == StructureKind.RUINED_PORTAL_NETHER
                     || kind == StructureKind.SHIPWRECK || kind == StructureKind.OCEAN_RUIN || kind == StructureKind.TRIAL_CHAMBERS;
             if (!noisy) {
                 keys.add(kind.key());

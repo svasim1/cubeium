@@ -3,6 +3,7 @@ package cubeium.cubeium.world;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -15,25 +16,29 @@ import dev.xpple.cubiomes.StructureConfig;
 /**
  * Finds structures of one {@link WorldGenerator}, following cubiomes-viewer: one generation attempt
  * per structure region ({@code getStructurePos}), kept only if the biome/terrain checks pass.
- * Results are cached per region, so panning back over an area costs nothing. Thread-safe.
+ * Results are cached per block of regions and hold only what was found, so panning back over an
+ * area costs nothing and chunk-based structures stay cheap to keep. Thread-safe.
  */
 public final class StructureFinder {
     public record Found(StructureKind kind, int x, int z) {
     }
 
     private static final int[] NONE = new int[0];
-    private static final int MAX_CACHED_REGIONS = 500_000;
+    /** Regions per cache block side. */
+    private static final int BLOCK = 16;
+    private static final int MAX_CACHED_BLOCKS = 50_000;
     private static final int STRONGHOLD_COUNT = 128;
 
     private final WorldGenerator world;
-    private final Map<StructureKind, Map<Long, int[]>> regions = new EnumMap<>(StructureKind.class);
+    /** Per kind: cache block key -> positions found in it, as {x0, z0, x1, z1, ...}. */
+    private final Map<StructureKind, Map<Long, int[]>> blocks = new EnumMap<>(StructureKind.class);
     private final Map<StructureKind, Integer> regionBlocks = new EnumMap<>(StructureKind.class);
     private volatile int[] strongholds;
 
     public StructureFinder(WorldGenerator world) {
         this.world = world;
         for (StructureKind kind : StructureKind.values()) {
-            regions.put(kind, new ConcurrentHashMap<>());
+            blocks.put(kind, new ConcurrentHashMap<>());
             regionBlocks.put(kind, loadRegionBlocks(kind));
         }
     }
@@ -68,17 +73,19 @@ public final class StructureFinder {
             return out;
         }
 
-        int size = regionBlocks.get(kind);
-        Map<Long, int[]> cache = regions.get(kind);
-        if (cache.size() > MAX_CACHED_REGIONS) {
+        long span = (long) regionBlocks.get(kind) * BLOCK;
+        Map<Long, int[]> cache = blocks.get(kind);
+        if (cache.size() > MAX_CACHED_BLOCKS) {
             cache.clear();
         }
-        for (int rx = Math.floorDiv(x0, size); rx <= Math.floorDiv(x1 - 1, size); rx++) {
-            for (int rz = Math.floorDiv(z0, size); rz <= Math.floorDiv(z1 - 1, size); rz++) {
-                int regionX = rx, regionZ = rz;
-                int[] pos = cache.computeIfAbsent(((long) rx << 32) | (rz & 0xFFFFFFFFL), k -> locate(kind, regionX, regionZ));
-                if (pos.length == 2 && pos[0] >= x0 && pos[0] < x1 && pos[1] >= z0 && pos[1] < z1) {
-                    out.add(new Found(kind, pos[0], pos[1]));
+        for (long bx = Math.floorDiv(x0, span); bx <= Math.floorDiv(x1 - 1L, span); bx++) {
+            for (long bz = Math.floorDiv(z0, span); bz <= Math.floorDiv(z1 - 1L, span); bz++) {
+                int blockX = (int) bx, blockZ = (int) bz;
+                int[] positions = cache.computeIfAbsent((bx << 32) | (bz & 0xFFFFFFFFL), k -> locateBlock(kind, blockX, blockZ));
+                for (int i = 0; i < positions.length; i += 2) {
+                    if (positions[i] >= x0 && positions[i] < x1 && positions[i + 1] >= z0 && positions[i + 1] < z1) {
+                        out.add(new Found(kind, positions[i], positions[i + 1]));
+                    }
                 }
             }
         }
@@ -93,6 +100,24 @@ public final class StructureFinder {
             strongholds = result;
         }
         return result;
+    }
+
+    private int[] locateBlock(StructureKind kind, int blockX, int blockZ) {
+        int[] found = new int[8];
+        int count = 0;
+        for (int rx = blockX * BLOCK; rx < (blockX + 1) * BLOCK; rx++) {
+            for (int rz = blockZ * BLOCK; rz < (blockZ + 1) * BLOCK; rz++) {
+                int[] pos = locate(kind, rx, rz);
+                if (pos.length == 2) {
+                    if (count + 2 > found.length) {
+                        found = Arrays.copyOf(found, found.length * 2);
+                    }
+                    found[count++] = pos[0];
+                    found[count++] = pos[1];
+                }
+            }
+        }
+        return count == 0 ? NONE : Arrays.copyOf(found, count);
     }
 
     private int[] locate(StructureKind kind, int regionX, int regionZ) {

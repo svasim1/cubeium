@@ -26,6 +26,7 @@ import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -123,6 +124,7 @@ final class MapWidget extends AbstractWidget {
         if (config.coordinateAxes) {
             drawAxes(graphics);
         }
+        drawZoomHint(graphics, config);
         if (config.renderMetrics) {
             drawMetrics(graphics, tiles);
         }
@@ -144,6 +146,27 @@ final class MapWidget extends AbstractWidget {
                         .append(Component.literal("  " + hoverX + ", " + hoverZ).withStyle(s -> s.withColor(0xFFFF55))), mouseX, mouseY);
             }
         }
+    }
+
+    /** Names enabled structures that the current zoom hides, so a missing marker is not a mystery. */
+    private void drawZoomHint(GuiGraphicsExtractor graphics, CubeiumConfig config) {
+        MapStructures structures = session.structures();
+        if (structures == null) {
+            return;
+        }
+        List<StructureKind> hidden = structures.hiddenAt(config.enabledStructures(), session.view.blocksPerPixel());
+        if (hidden.isEmpty()) {
+            return;
+        }
+        MutableComponent names = Component.empty();
+        for (int i = 0; i < hidden.size(); i++) {
+            names.append(i == 0 ? Component.empty() : Component.literal(", "))
+                    .append(Component.translatable("cubeium.structure." + hidden.get(i).key()));
+        }
+        Component hint = Component.translatable("cubeium.map.zoom_in_for", names);
+        int y = getY() + STRIP_HEIGHT + 2;
+        graphics.fill(getX() + 2, y - 1, getX() + 6 + font.width(hint), y + 9, 0x90000000);
+        graphics.text(font, hint, getX() + 4, y, 0xFFE0E0E0);
     }
 
     private void drawGrid(GuiGraphicsExtractor graphics) {
@@ -214,7 +237,7 @@ final class MapWidget extends AbstractWidget {
 
     private List<Waypoint> drawWaypoints(GuiGraphicsExtractor graphics) {
         List<Waypoint> shown = new ArrayList<>();
-        if (session.worldKey == null || !CubeiumConfig.get().showWaypoints) {
+        if (session.worldKey == null) {
             return shown;
         }
         for (Waypoint waypoint : CubeiumConfig.get().waypoints(session.worldKey)) {
@@ -392,9 +415,7 @@ final class MapWidget extends AbstractWidget {
                 () -> Minecraft.getInstance().keyboardHandler.setClipboard(wx + " " + wz)));
         items.add(new ContextMenu.Item(Component.translatable("cubeium.menu.center"), () -> session.view.center(wx + 0.5, wz + 0.5)));
         List<Waypoint> waypoints = CubeiumConfig.get().waypoints(session.worldKey == null ? "none" : session.worldKey);
-        Waypoint near = CubeiumConfig.get().showWaypoints
-                ? waypointNear(waypoints.stream().filter(w -> session.dimension.key().equals(w.dimension)).toList(), x, y)
-                : null;
+        Waypoint near = waypointNear(waypoints.stream().filter(w -> session.dimension.key().equals(w.dimension)).toList(), x, y);
         if (near != null) {
             items.add(new ContextMenu.Item(Component.translatable("cubeium.menu.remove_waypoint", near.name), () -> {
                 waypoints.remove(near);
@@ -405,7 +426,6 @@ final class MapWidget extends AbstractWidget {
             items.add(new ContextMenu.Item(Component.translatable("cubeium.menu.add_waypoint"), () -> {
                 String name = Component.translatable("cubeium.waypoints.default_name", waypoints.size() + 1).getString();
                 waypoints.add(new Waypoint(name, wx, wz, session.dimension.key(), waypoints.size()));
-                CubeiumConfig.get().showWaypoints = true; // a new waypoint should be visible
                 CubeiumConfig.get().save();
                 onWaypointsChanged.run();
             }));
@@ -450,6 +470,7 @@ final class MapWidget extends AbstractWidget {
         icons.put(StructureKind.RUINED_PORTAL_NETHER, new ItemStack(Items.CRYING_OBSIDIAN));
         icons.put(StructureKind.END_CITY, new ItemStack(Items.PURPUR_BLOCK));
         icons.put(StructureKind.END_CITY_SHIP, new ItemStack(Items.ELYTRA));
+        icons.put(StructureKind.END_GATEWAY, new ItemStack(Items.ENDER_PEARL));
         return icons;
     }
 
