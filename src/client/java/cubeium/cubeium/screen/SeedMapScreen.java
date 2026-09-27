@@ -96,7 +96,9 @@ public final class SeedMapScreen extends Screen {
 
         int mapWidth = width - 2 * PAD;
         boolean collapsed = config.panelCollapsed;
-        int panelHeight = collapsed ? 0 : Math.clamp((height - MAP_Y) * 3 / 10, 64, 120);
+        // Tab contents are always laid out at the expanded size; collapsing only hides the panel.
+        int contentHeight = Math.clamp((height - MAP_Y) * 3 / 10, 64, 120);
+        int panelHeight = collapsed ? 0 : contentHeight;
         int tabBarY = height - BOTTOM_MARGIN - panelHeight - PanelTabBar.HEIGHT;
         panelTop = tabBarY + PanelTabBar.HEIGHT;
         int mapHeight = Math.max(40, tabBarY - 6 - MAP_Y);
@@ -143,16 +145,21 @@ public final class SeedMapScreen extends Screen {
         layoutBanner();
 
         // Tabs. While the panel is collapsed no tab is open; picking one expands the panel again.
-        List<Tab> tabs = List.of(mapTab(mapWidth), structuresTab(mapWidth, panelHeight), biomesTab(mapWidth, panelHeight),
-                waypointsTab(mapWidth, panelHeight));
-        tabManager = new TabManager(this::addRenderableWidget, this::removeWidget, tab -> {
+        List<Tab> tabs = List.of(mapTab(mapWidth), structuresTab(mapWidth, contentHeight), biomesTab(mapWidth, contentHeight),
+                waypointsTab(mapWidth, contentHeight));
+        // While collapsed, a tab's widgets are never shown: choosing a tab just expands the panel.
+        tabManager = new TabManager(widget -> {
+            if (!config.panelCollapsed) {
+                addRenderableWidget(widget);
+            }
+        }, this::removeWidget, tab -> {
             if (config.panelCollapsed) {
                 selectedTab = tabs.indexOf(tab);
                 setPanelCollapsed(false);
             }
         }, tab -> { });
         tabBar = addRenderableWidget(PanelTabBar.create(tabManager, PAD, tabBarY, mapWidth, tabs));
-        tabManager.setTabArea(new ScreenRectangle(PAD, panelTop + 4, mapWidth, Math.max(0, panelHeight - 8)));
+        tabManager.setTabArea(new ScreenRectangle(PAD, panelTop + 4, mapWidth, contentHeight - 8));
         if (!collapsed) {
             tabBar.selectTab(Math.min(selectedTab, tabs.size() - 1), false);
         }
@@ -328,8 +335,14 @@ public final class SeedMapScreen extends Screen {
         GridLayout grid = (GridLayout) tab.getLayout();
         List<Waypoint> all = config.waypoints(worldKey);
         List<Waypoint> here = all.stream().filter(w -> session.dimension.key().equals(w.dimension)).toList();
+        grid.rowSpacing(4);
+        grid.addChild(CycleButton.onOffBuilder(config.showWaypoints).create(0, 0, 150, 20, Component.translatable("cubeium.waypoints.show"),
+                (b, v) -> {
+                    config.showWaypoints = v;
+                    config.save();
+                }), 0, 0);
         if (here.isEmpty()) {
-            grid.addChild(new StringWidget(Component.translatable("cubeium.waypoints.empty").copy().withStyle(s -> s.withColor(0xA0A0A0)), font), 0, 0);
+            grid.addChild(new StringWidget(Component.translatable("cubeium.waypoints.empty").copy().withStyle(s -> s.withColor(0xA0A0A0)), font), 1, 0);
             return tab;
         }
         GridLayout list = new GridLayout().rowSpacing(3).columnSpacing(6);
@@ -350,8 +363,8 @@ public final class SeedMapScreen extends Screen {
             }).width(50).build(), row, 4);
             row++;
         }
-        ScrollableLayout scroll = new ScrollableLayout(minecraft, list, panelHeight - 12);
-        grid.addChild(scroll, 0, 0);
+        ScrollableLayout scroll = new ScrollableLayout(minecraft, list, panelHeight - 12 - 24);
+        grid.addChild(scroll, 1, 0);
         return tab;
     }
 

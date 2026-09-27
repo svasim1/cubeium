@@ -95,5 +95,6 @@
   "cubeium.waypoints.delete": "Delete",
   "cubeium.waypoints.default_name": "Waypoint %s",
   "cubeium.menu.add_waypoint": "Add waypoint here",
-  "cubeium.menu.remove_waypoint": "Remove %s"
+  "cubeium.menu.remove_waypoint": "Remove %s",
+  "cubeium.waypoints.show": "Show Waypoints"
 }

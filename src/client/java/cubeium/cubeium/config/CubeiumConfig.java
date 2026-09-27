@@ -40,6 +40,7 @@ public final class CubeiumConfig {
     public boolean coordinateAxes = true;
     public boolean panelCollapsed = false;
     public boolean slimeChunks = false;
+    public boolean showWaypoints = true;
 
     /** Enabled structures, by {@link StructureKind#key()}. */
     public Set<String> structures = new LinkedHashSet<>(defaultStructures());
