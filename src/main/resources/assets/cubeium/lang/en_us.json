@@ -90,5 +90,6 @@
   "cubeium.waypoints.default_name": "Waypoint %s",
   "cubeium.menu.add_waypoint": "Add waypoint here",
   "cubeium.menu.remove_waypoint": "Remove %s",
-  "cubeium.waypoints.show": "Show Waypoints"
+  "cubeium.structure.end_gateway": "End Gateway",
+  "cubeium.map.zoom_in_for": "Zoom in to see: %s"
 }

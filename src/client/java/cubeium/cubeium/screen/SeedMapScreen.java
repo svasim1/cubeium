@@ -149,8 +149,9 @@ public final class SeedMapScreen extends Screen {
                 addRenderableWidget(widget);
             }
         }, this::removeWidget, tab -> {
+            // Remembered on every switch, so rebuilds (search, waypoint changes) reopen the same tab.
+            selectedTab = tabs.indexOf(tab);
             if (config.panelCollapsed) {
-                selectedTab = tabs.indexOf(tab);
                 setPanelCollapsed(false);
             }
         }, tab -> { });
@@ -275,14 +276,8 @@ public final class SeedMapScreen extends Screen {
         GridLayout grid = (GridLayout) tab.getLayout();
         List<Waypoint> all = config.waypoints(worldKey);
         List<Waypoint> here = all.stream().filter(w -> session.dimension.key().equals(w.dimension)).toList();
-        grid.rowSpacing(4);
-        grid.addChild(CycleButton.onOffBuilder(config.showWaypoints).create(0, 0, 150, 20, Component.translatable("cubeium.waypoints.show"),
-                (b, v) -> {
-                    config.showWaypoints = v;
-                    config.save();
-                }), 0, 0);
         if (here.isEmpty()) {
-            grid.addChild(new StringWidget(Component.translatable("cubeium.waypoints.empty").copy().withStyle(s -> s.withColor(0xA0A0A0)), font), 1, 0);
+            grid.addChild(new StringWidget(Component.translatable("cubeium.waypoints.empty").copy().withStyle(s -> s.withColor(0xA0A0A0)), font), 0, 0);
             return tab;
         }
         GridLayout list = new GridLayout().rowSpacing(3).columnSpacing(6);
@@ -303,8 +298,8 @@ public final class SeedMapScreen extends Screen {
             }).width(50).build(), row, 4);
             row++;
         }
-        ScrollableLayout scroll = new ScrollableLayout(minecraft, list, panelHeight - 12 - 24);
-        grid.addChild(scroll, 1, 0);
+        ScrollableLayout scroll = new ScrollableLayout(minecraft, list, panelHeight - 12);
+        grid.addChild(scroll, 0, 0);
         return tab;
     }
 

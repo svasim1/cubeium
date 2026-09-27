@@ -31,7 +31,9 @@ public enum StructureKind {
     RUINED_PORTAL_NETHER("ruined_portal_nether", Dimension.NETHER, Cubiomes::Ruined_Portal_N),
     END_CITY("end_city", Dimension.END, Cubiomes::End_City),
     /** End cities that include a ship (elytra); the plain kind lists the ones without. */
-    END_CITY_SHIP("end_city_ship", Dimension.END, Cubiomes::End_City);
+    END_CITY_SHIP("end_city_ship", Dimension.END, Cubiomes::End_City),
+    /** The small return gateways on the outer End islands (End Highlands). */
+    END_GATEWAY("end_gateway", Dimension.END, Cubiomes::End_Gateway);
 
     private final String key;
     private final Dimension dimension;
@@ -56,9 +58,9 @@ public enum StructureKind {
         return cubiomesType.getAsInt();
     }
 
-    /** Structures placed per chunk rather than in large regions; too dense to search when zoomed out. */
+    /** Placed per chunk rather than in large regions, so only searched down to a certain zoom. */
     public boolean isDense() {
-        return this == MINESHAFT || this == BURIED_TREASURE;
+        return this == MINESHAFT || this == BURIED_TREASURE || this == END_GATEWAY;
     }
 
     public static List<StructureKind> in(Dimension dimension) {

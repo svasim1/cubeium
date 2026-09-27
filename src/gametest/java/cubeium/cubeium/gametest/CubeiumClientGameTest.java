@@ -43,7 +43,9 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.StructureTags;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.levelgen.WorldOptions;
@@ -180,6 +182,8 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
             for (StructureKind kind : StructureKind.in(dimension)) {
                 if (kind == StructureKind.STRONGHOLD) {
                     compareStrongholds(level, finder, failures);
+                } else if (kind == StructureKind.END_GATEWAY) {
+                    compareGateways(level, finder, failures);
                 } else {
                     compareStructure(level, finder, kind, failures);
                 }
@@ -242,6 +246,52 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
         if (!sharedSet && agreement < 0.95) {
             failures.add(kind + ": only " + Math.round(agreement * 100) + "% of " + total + " attempts agree " + examples);
         }
+    }
+
+    /**
+     * End gateways are a decoration feature, not a structure, so the chunks are generated for real
+     * and searched for the gateway block: where one is predicted, and next to those where none is.
+     */
+    private static void compareGateways(ServerLevel level, StructureFinder finder, List<String> failures) {
+        List<StructureFinder.Found> predicted = finder.find(StructureKind.END_GATEWAY, -3000, -3000, 3000, 3000);
+        Set<Long> predictedChunks = new HashSet<>();
+        predicted.forEach(f -> predictedChunks.add(ChunkPos.pack(f.x() >> 4, f.z() >> 4)));
+        List<StructureFinder.Found> sample = predicted.subList(0, Math.min(6, predicted.size()));
+        int confirmed = 0, emptyChecked = 0, unexpected = 0;
+        for (StructureFinder.Found gateway : sample) {
+            if (hasGatewayBlock(level, gateway.x() >> 4, gateway.z() >> 4)) {
+                confirmed++;
+            }
+            for (int[] offset : new int[][] {{3, 0}, {0, 3}}) {
+                int cx = (gateway.x() >> 4) + offset[0], cz = (gateway.z() >> 4) + offset[1];
+                if (!predictedChunks.contains(ChunkPos.pack(cx, cz))) {
+                    emptyChecked++;
+                    if (hasGatewayBlock(level, cx, cz)) {
+                        unexpected++;
+                    }
+                }
+            }
+        }
+        Cubeium.LOGGER.info("[GameTest] END_GATEWAY: {} predicted within 3000 blocks; {}/{} generated with a gateway, {} of {} empty chunks had one",
+                predicted.size(), confirmed, sample.size(), unexpected, emptyChecked);
+        if (sample.isEmpty() || confirmed != sample.size() || unexpected > 0) {
+            failures.add("END_GATEWAY: " + confirmed + "/" + sample.size() + " confirmed, " + unexpected + " unexpected");
+        }
+    }
+
+    private static boolean hasGatewayBlock(ServerLevel level, int chunkX, int chunkZ) {
+        LevelChunk chunk = level.getChunk(chunkX, chunkZ);
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        for (int y = level.getMinY(); y <= level.getMaxY(); y++) {
+            for (int x = 0; x < 16; x++) {
+                for (int z = 0; z < 16; z++) {
+                    if (chunk.getBlockState(pos.set(chunkX * 16 + x, y, chunkZ * 16 + z)).is(Blocks.END_GATEWAY)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     private static void compareStrongholds(ServerLevel level, StructureFinder finder, List<String> failures) {
@@ -356,6 +406,10 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
     }
 
 
+    private static boolean present(ClientGameTestContext context, String translationKey) {
+        return context.computeOnClient(client -> find(client.gui.screen().children(), translationKey) != null);
+    }
+
     /** Clicks at a GUI-pixel offset from a window position. */
     private static void clickGui(ClientGameTestContext context, double[] window, int dx, int dy) {
         double scale = context.computeOnClient(client -> (double) client.getWindow().getGuiScale());
@@ -424,6 +478,19 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
         click(context, "cubeium.tab.biomes");
         context.waitTicks(5);
         context.takeScreenshot("cubeium-biomes-tab");
+        // Typing in the search rebuilds the list; the Biomes tab must stay open.
+        click(context, "cubeium.biomes.search");
+        context.getInput().typeChars("for");
+        context.waitTicks(5);
+        if (!present(context, "cubeium.biomes.search") || !present(context, "biome.minecraft.forest")) {
+            throw new AssertionError("searching biomes left the Biomes tab");
+        }
+        context.takeScreenshot("cubeium-biome-search");
+        for (int i = 0; i < 3; i++) {
+            context.getInput().pressKey(InputConstants.KEY_BACKSPACE);
+            context.waitTick();
+        }
+        context.waitTicks(5);
         // Highlight one biome: the rest of the map dims and a banner offers "Show all".
         click(context, "cubeium.biomes.highlight");
         click(context, "biome.minecraft.badlands");
@@ -451,6 +518,8 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
         context.waitTicks(40);
 
         // Right-click menu in the middle of the map, with dark mode and marker labels on.
+        click(context, "cubeium.tab.waypoints");
+        context.waitTicks(5);
         double[] center = context.computeOnClient(client -> new double[] {client.getWindow().getWidth() / 2.0, client.getWindow().getHeight() / 3.0});
         context.getInput().setCursorPos(center[0], center[1]);
         context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_RIGHT);
@@ -460,15 +529,10 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
         // "Add waypoint here" is the third menu row (menu opens 6 px below-right of the cursor).
         clickGui(context, center, 16, 6 + 12 + 4 + 2 * 12 + 4);
         context.waitTicks(10);
-        click(context, "cubeium.tab.waypoints");
-        context.waitTicks(10);
-        context.takeScreenshot("cubeium-waypoints");
-        click(context, "cubeium.waypoints.show");
-        context.waitTicks(5);
-        if (context.computeOnClient(client -> CubeiumConfig.get().showWaypoints)) {
-            throw new AssertionError("Show Waypoints did not turn off");
+        if (!present(context, "cubeium.waypoints.delete")) {
+            throw new AssertionError("adding a waypoint left the Waypoints tab");
         }
-        context.takeScreenshot("cubeium-waypoints-hidden");
+        context.takeScreenshot("cubeium-waypoints");
 
         click(context, "cubeium.tab.map");
         context.waitTicks(5);

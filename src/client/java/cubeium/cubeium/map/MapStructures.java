@@ -18,9 +18,7 @@ import cubeium.cubeium.world.StructureKind;
  */
 public final class MapStructures {
     /** Minimum on-screen distance between a kind's placement regions for its markers to be shown. */
-    private static final double MIN_REGION_PIXELS = 20;
-    /** Dense kinds (one attempt per chunk) are only searched this close in. */
-    private static final double MAX_DENSE_BLOCKS_PER_PIXEL = 2;
+    private static final double MIN_REGION_PIXELS = 6;
 
     private static final ExecutorService SEARCH = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "Cubeium structure search");
@@ -52,10 +50,17 @@ public final class MapStructures {
         if (kind == StructureKind.STRONGHOLD) {
             return true;
         }
-        if (kind.isDense()) {
-            return blocksPerPixel <= MAX_DENSE_BLOCKS_PER_PIXEL;
-        }
-        return finder.regionBlocks(kind) / blocksPerPixel >= MIN_REGION_PIXELS;
+        return switch (kind) {
+            // Per-chunk kinds: zoom limits by how often they occur, so markers do not swamp the map.
+            case MINESHAFT, BURIED_TREASURE -> blocksPerPixel <= 8;
+            case END_GATEWAY -> blocksPerPixel <= 16;
+            default -> finder.regionBlocks(kind) / blocksPerPixel >= MIN_REGION_PIXELS;
+        };
+    }
+
+    /** Enabled kinds of this dimension that the current zoom hides. */
+    public List<StructureKind> hiddenAt(Set<StructureKind> enabled, double blocksPerPixel) {
+        return enabled.stream().filter(k -> finder.supports(k) && !visibleAt(k, blocksPerPixel)).sorted().toList();
     }
 
     /** Called every frame with the view rectangle in blocks; starts a search when needed. */

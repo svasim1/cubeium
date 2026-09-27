@@ -128,7 +128,13 @@ class WorldGeneratorTest {
             for (StructureKind kind : StructureKind.in(dimension)) {
                 assertTrue(finder.supports(kind), kind + " should exist in 26.3");
                 // Buried treasure is rolled at ~1% per chunk and needs a beach, so search wider.
-                int radius = kind == StructureKind.BURIED_TREASURE ? 3000 : kind.isDense() ? 256 : 20_000;
+                // Buried treasure needs a beach and end gateways the outer End Highlands, so search wider.
+                int radius = switch (kind) {
+                    case BURIED_TREASURE -> 3000;
+                    case END_GATEWAY -> 5000;
+                    case MINESHAFT -> 256;
+                    default -> 20_000;
+                };
                 if (kind != StructureKind.STRONGHOLD) {
                     assertFalse(finder.find(kind, -radius, -radius, radius, radius).isEmpty(), "no " + kind + " found");
                 }
