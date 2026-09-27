@@ -1,6 +1,10 @@
 package cubeium.cubeium.screen;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
@@ -41,6 +45,8 @@ final class MapWidget extends AbstractWidget {
     private static final int ICON = 16;
     private static final Map<StructureKind, ItemStack> ICONS = icons();
     private static final ItemStack ORIGIN_ICON = new ItemStack(Items.COMPASS);
+    private static final Set<StructureKind> PRIORITY = EnumSet.of(StructureKind.STRONGHOLD, StructureKind.END_CITY_SHIP,
+            StructureKind.WOODLAND_MANSION, StructureKind.ANCIENT_CITY);
     private static final DyeColor[] WAYPOINT_COLORS = {DyeColor.RED, DyeColor.BLUE, DyeColor.LIME, DyeColor.YELLOW,
             DyeColor.MAGENTA, DyeColor.ORANGE, DyeColor.CYAN, DyeColor.WHITE};
     private static final ItemStack[] WAYPOINT_ICONS = Arrays.stream(WAYPOINT_COLORS)
@@ -194,12 +200,18 @@ final class MapWidget extends AbstractWidget {
         structures.update(config.enabledStructures(), worldX(getX()), worldZ(getY()), worldX(getRight()), worldZ(getBottom()), bpp);
 
         drawIcon(graphics, ORIGIN_ICON, 0, 0, config.markerLabels ? Component.translatable("cubeium.map.origin") : null);
-        for (StructureFinder.Found found : structures.found()) {
+        // At most one icon per icon-sized cell: keeps far zoom levels readable and the draw count
+        // bounded. Rare, sought-after structures claim their cell first.
+        Set<Long> occupied = new HashSet<>();
+        List<StructureFinder.Found> candidates = new ArrayList<>(structures.found());
+        candidates.sort(Comparator.comparingInt(f -> PRIORITY.contains(f.kind()) ? 0 : 1));
+        for (StructureFinder.Found found : candidates) {
             if (!config.structures.contains(found.kind().key()) || !structures.visibleAt(found.kind(), bpp)) {
                 continue;
             }
             int x = guiX(found.x()), y = guiY(found.z());
-            if (x < getX() - ICON || x > getRight() + ICON || y < getY() - ICON || y > getBottom() + ICON) {
+            if (x < getX() - ICON || x > getRight() + ICON || y < getY() - ICON || y > getBottom() + ICON
+                    || !occupied.add(((long) Math.floorDiv(x, ICON) << 32) | (Math.floorDiv(y, ICON) & 0xFFFFFFFFL))) {
                 continue;
             }
             shown.add(found);

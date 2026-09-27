@@ -234,6 +234,9 @@ public final class MapTiles implements AutoCloseable {
                 }
             }
             finished.add(new Finished(key, ids, image, version));
+            if (closed) {
+                releaseFinished(); // closed while this tile was being made: nobody will upload it
+            }
         } catch (RuntimeException e) {
             Cubeium.LOGGER.warn("Failed to generate map tile {}", key, e);
             pending.remove(key);
@@ -289,6 +292,10 @@ public final class MapTiles implements AutoCloseable {
             }
         }
         tiles.clear();
+        releaseFinished();
+    }
+
+    private void releaseFinished() {
         Finished done;
         while ((done = finished.poll()) != null) {
             done.image.close();
