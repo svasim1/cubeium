@@ -27,13 +27,6 @@ final class Backgrounds {
         dirt(graphics, 0, 0, width, height, CubeiumConfig.get().darkMode ? DARK_SCREEN_TINT : SCREEN_TINT);
     }
 
-    /** A recessed panel with the vanilla header/footer separators along its top and bottom edge. */
-    static void panel(GuiGraphicsExtractor graphics, int x0, int y0, int x1, int y1) {
-        dirt(graphics, x0, y0, x1 - x0, y1 - y0, panelTint());
-        graphics.blit(RenderPipelines.GUI_TEXTURED, Screen.HEADER_SEPARATOR, x0, y0, 0, 0, x1 - x0, 2, 32, 2);
-        graphics.blit(RenderPipelines.GUI_TEXTURED, Screen.FOOTER_SEPARATOR, x0, y1 - 2, 0, 0, x1 - x0, 2, 32, 2);
-    }
-
     static void panelFill(GuiGraphicsExtractor graphics, int x0, int y0, int x1, int y1) {
         dirt(graphics, x0, y0, x1 - x0, y1 - y0, panelTint());
     }

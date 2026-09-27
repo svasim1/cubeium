@@ -1,6 +1,7 @@
 package cubeium.cubeium.screen;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -40,8 +41,10 @@ final class MapWidget extends AbstractWidget {
     private static final int ICON = 16;
     private static final Map<StructureKind, ItemStack> ICONS = icons();
     private static final ItemStack ORIGIN_ICON = new ItemStack(Items.COMPASS);
-    static final DyeColor[] WAYPOINT_COLORS = {DyeColor.RED, DyeColor.BLUE, DyeColor.LIME, DyeColor.YELLOW,
+    private static final DyeColor[] WAYPOINT_COLORS = {DyeColor.RED, DyeColor.BLUE, DyeColor.LIME, DyeColor.YELLOW,
             DyeColor.MAGENTA, DyeColor.ORANGE, DyeColor.CYAN, DyeColor.WHITE};
+    private static final ItemStack[] WAYPOINT_ICONS = Arrays.stream(WAYPOINT_COLORS)
+            .map(color -> new ItemStack(Items.BANNER.pick(color))).toArray(ItemStack[]::new);
     private static final int SLIME_COLOR = 0x6040E040;
     /** Slime chunks are drawn once a chunk is at least this many GUI pixels wide. */
     private static final double SLIME_MIN_CHUNK_PIXELS = 6;
@@ -140,7 +143,7 @@ final class MapWidget extends AbstractWidget {
                 graphics.setTooltipForNextFrame(font, Component.translatable("cubeium.structure." + near.kind().key())
                         .append(Component.literal("  " + near.x() + ", " + near.z()).withStyle(s -> s.withColor(0xFFFF55))), mouseX, mouseY);
             } else if (config.floatingTooltip) {
-                graphics.setTooltipForNextFrame(font, biomeName(tiles).copy()
+                graphics.setTooltipForNextFrame(font, biomeName(hoveredBiome(tiles, hoverX, hoverZ)).copy()
                         .append(Component.literal("  " + hoverX + ", " + hoverZ).withStyle(s -> s.withColor(0xFFFF55))), mouseX, mouseY);
             }
         }
@@ -228,7 +231,7 @@ final class MapWidget extends AbstractWidget {
     }
 
     static ItemStack waypointIcon(Waypoint waypoint) {
-        return new ItemStack(Items.BANNER.pick(WAYPOINT_COLORS[Math.floorMod(waypoint.color, WAYPOINT_COLORS.length)]));
+        return WAYPOINT_ICONS[Math.floorMod(waypoint.color, WAYPOINT_ICONS.length)];
     }
 
     private void drawFound(GuiGraphicsExtractor graphics) {
@@ -269,11 +272,13 @@ final class MapWidget extends AbstractWidget {
         PlayerFaceExtractor.extractRenderState(graphics, player.getSkin(), x - 4, y - 4, 8);
     }
 
-    private Component biomeName(MapTiles tiles) {
-        int id = tiles.cachedBiomeAt(hoverX, hoverZ);
-        if (id < 0) {
-            id = tiles.world().biomeAt(hoverX, hoverZ);
-        }
+    /** Biome under the cursor: from a ready tile when possible, otherwise sampled directly. */
+    private static int hoveredBiome(MapTiles tiles, int x, int z) {
+        int id = tiles.cachedBiomeAt(x, z);
+        return id >= 0 ? id : tiles.world().biomeAt(x, z);
+    }
+
+    private static Component biomeName(int id) {
         String name = Biomes.name(MapSession.MC_VERSION, id);
         return name == null ? Component.literal("?") : Component.translatable("biome.minecraft." + name);
     }
@@ -294,11 +299,8 @@ final class MapWidget extends AbstractWidget {
         int coordsX = getRight() - 4 - font.width(coords);
         graphics.text(font, coords, coordsX, getY() + 2, 0xFFFFFF55);
 
-        int id = tiles.cachedBiomeAt(hoverX, hoverZ);
-        if (id < 0) {
-            id = tiles.world().biomeAt(hoverX, hoverZ);
-        }
-        Component name = biomeName(tiles);
+        int id = hoveredBiome(tiles, hoverX, hoverZ);
+        Component name = biomeName(id);
         int nameX = coordsX - 12 - font.width(name);
         graphics.text(font, name, nameX, getY() + 2, 0xFFFFFFFF);
         graphics.fill(nameX - 11, getY() + 2, nameX - 3, getY() + 10, 0xFF000000);
@@ -466,10 +468,6 @@ final class MapWidget extends AbstractWidget {
         icons.put(StructureKind.END_CITY, new ItemStack(Items.PURPUR_BLOCK));
         icons.put(StructureKind.END_CITY_SHIP, new ItemStack(Items.ELYTRA));
         return icons;
-    }
-
-    static ItemStack icon(StructureKind kind) {
-        return ICONS.get(kind);
     }
 
     /** Dimension shown as the default when the map opens; mirrors the player's. */
