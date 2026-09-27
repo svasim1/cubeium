@@ -5,9 +5,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -32,10 +34,14 @@ public final class CubeiumConfig {
     public boolean teleportInMenu = false;
     public boolean keepMapPosition = false;
     public boolean renderMetrics = false;
+    /** GUI scale of the map screens; 0 = automatic. */
+    public int mapUiScale = 0;
 
     // Map tab
     public boolean regionGrid = false;
     public boolean coordinateAxes = true;
+    public boolean panelCollapsed = false;
+    public boolean slimeChunks = false;
 
     // Structures tab: StructureKind keys
     public Set<String> structures = new LinkedHashSet<>(defaultStructures());
@@ -47,11 +53,18 @@ public final class CubeiumConfig {
     /** Seed text per world ("sp:<save name>" or "mp:<server address>"), so each world keeps its own. */
     public Map<String, String> seeds = new LinkedHashMap<>();
 
+    /** Waypoints per world, keyed like {@link #seeds}. */
+    public Map<String, List<Waypoint>> waypoints = new LinkedHashMap<>();
+
     public static CubeiumConfig get() {
         if (instance == null) {
             instance = load();
         }
         return instance;
+    }
+
+    public List<Waypoint> waypoints(String worldKey) {
+        return waypoints.computeIfAbsent(worldKey, key -> new ArrayList<>());
     }
 
     public Set<StructureKind> enabledStructures() {
@@ -103,6 +116,7 @@ public final class CubeiumConfig {
         if (structures == null) structures = new LinkedHashSet<>(defaultStructures());
         if (highlightedBiomes == null) highlightedBiomes = new LinkedHashSet<>();
         if (seeds == null) seeds = new LinkedHashMap<>();
+        if (waypoints == null) waypoints = new LinkedHashMap<>();
     }
 
     private static Set<String> defaultStructures() {

@@ -8,11 +8,13 @@ import java.util.Map;
 import com.mojang.blaze3d.platform.InputConstants;
 
 import cubeium.cubeium.config.CubeiumConfig;
+import cubeium.cubeium.config.Waypoint;
 import cubeium.cubeium.map.MapStructures;
 import cubeium.cubeium.map.MapTiles;
 import cubeium.cubeium.map.MapView;
 import cubeium.cubeium.world.Biomes;
 import cubeium.cubeium.world.Dimension;
+import cubeium.cubeium.world.SlimeChunks;
 import cubeium.cubeium.world.StructureFinder;
 import cubeium.cubeium.world.StructureKind;
 import net.minecraft.client.Minecraft;
@@ -24,6 +26,7 @@ import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import org.jspecify.annotations.Nullable;
@@ -37,10 +40,17 @@ final class MapWidget extends AbstractWidget {
     private static final int ICON = 16;
     private static final Map<StructureKind, ItemStack> ICONS = icons();
     private static final ItemStack ORIGIN_ICON = new ItemStack(Items.COMPASS);
+    static final DyeColor[] WAYPOINT_COLORS = {DyeColor.RED, DyeColor.BLUE, DyeColor.LIME, DyeColor.YELLOW,
+            DyeColor.MAGENTA, DyeColor.ORANGE, DyeColor.CYAN, DyeColor.WHITE};
+    private static final int SLIME_COLOR = 0x6040E040;
+    /** Slime chunks are drawn once a chunk is at least this many GUI pixels wide. */
+    private static final double SLIME_MIN_CHUNK_PIXELS = 6;
+    private static final int FOUND_COLOR = 0xFFFF5555;
 
     private final MapSession session;
     private final Font font;
     private final Runnable onContextTeleport;
+    private final Runnable onWaypointsChanged;
     private @Nullable ContextMenu menu;
     private boolean dragging;
     private boolean hovering;
@@ -49,11 +59,12 @@ final class MapWidget extends AbstractWidget {
     private int hoverX;
     private int hoverZ;
 
-    MapWidget(MapSession session, Font font, Runnable onContextTeleport) {
+    MapWidget(MapSession session, Font font, Runnable onContextTeleport, Runnable onWaypointsChanged) {
         super(0, 0, 0, 0, Component.translatable("cubeium.map"));
         this.session = session;
         this.font = font;
         this.onContextTeleport = onContextTeleport;
+        this.onWaypointsChanged = onWaypointsChanged;
     }
 
     void setBounds(int x, int y, int width, int height) {
@@ -91,10 +102,15 @@ final class MapWidget extends AbstractWidget {
         tiles.draw(graphics, getX(), getY(), width, height, session.view, Minecraft.getInstance().getWindow().getGuiScale());
         graphics.enableScissor(getX(), getY(), getRight(), getBottom());
         CubeiumConfig config = CubeiumConfig.get();
+        if (config.slimeChunks && session.dimension == Dimension.OVERWORLD) {
+            drawSlimeChunks(graphics, tiles.world().seed());
+        }
         if (config.regionGrid) {
             drawGrid(graphics);
         }
         List<StructureFinder.Found> markers = drawMarkers(graphics, config);
+        List<Waypoint> waypoints = drawWaypoints(graphics);
+        drawFound(graphics);
         drawPlayer(graphics);
 
         hovering = isMouseOver(mouseX, mouseY) && (menu == null || !menu.contains(mouseX, mouseY));
@@ -116,7 +132,11 @@ final class MapWidget extends AbstractWidget {
             menu.draw(graphics, font, mouseX, mouseY);
         } else if (hovering && !dragging) {
             StructureFinder.Found near = markerNear(markers, mouseX, mouseY);
-            if (near != null) {
+            Waypoint waypoint = waypointNear(waypoints, mouseX, mouseY);
+            if (waypoint != null) {
+                graphics.setTooltipForNextFrame(font, Component.literal(waypoint.name)
+                        .append(Component.literal("  " + waypoint.x + ", " + waypoint.z).withStyle(s -> s.withColor(0xFFFF55))), mouseX, mouseY);
+            } else if (near != null) {
                 graphics.setTooltipForNextFrame(font, Component.translatable("cubeium.structure." + near.kind().key())
                         .append(Component.literal("  " + near.x() + ", " + near.z()).withStyle(s -> s.withColor(0xFFFF55))), mouseX, mouseY);
             } else if (config.floatingTooltip) {
@@ -176,6 +196,60 @@ final class MapWidget extends AbstractWidget {
         }
     }
 
+    private void drawSlimeChunks(GuiGraphicsExtractor graphics, long seed) {
+        double bpp = session.view.blocksPerPixel();
+        if (16 / bpp < SLIME_MIN_CHUNK_PIXELS) {
+            return;
+        }
+        int cx0 = Math.floorDiv((int) Math.floor(worldX(getX())), 16), cx1 = Math.floorDiv((int) Math.ceil(worldX(getRight())), 16);
+        int cz0 = Math.floorDiv((int) Math.floor(worldZ(getY())), 16), cz1 = Math.floorDiv((int) Math.ceil(worldZ(getBottom())), 16);
+        for (int cz = cz0; cz <= cz1; cz++) {
+            for (int cx = cx0; cx <= cx1; cx++) {
+                if (SlimeChunks.isSlimeChunk(seed, cx, cz)) {
+                    graphics.fill(guiX(cx * 16), guiY(cz * 16), guiX(cx * 16 + 16), guiY(cz * 16 + 16), SLIME_COLOR);
+                }
+            }
+        }
+    }
+
+    private List<Waypoint> drawWaypoints(GuiGraphicsExtractor graphics) {
+        List<Waypoint> shown = new ArrayList<>();
+        if (session.worldKey == null) {
+            return shown;
+        }
+        for (Waypoint waypoint : CubeiumConfig.get().waypoints(session.worldKey)) {
+            if (!session.dimension.key().equals(waypoint.dimension)) {
+                continue;
+            }
+            shown.add(waypoint);
+            drawIcon(graphics, waypointIcon(waypoint), waypoint.x, waypoint.z, Component.literal(waypoint.name));
+        }
+        return shown;
+    }
+
+    static ItemStack waypointIcon(Waypoint waypoint) {
+        return new ItemStack(Items.BANNER.pick(WAYPOINT_COLORS[Math.floorMod(waypoint.color, WAYPOINT_COLORS.length)]));
+    }
+
+    private void drawFound(GuiGraphicsExtractor graphics) {
+        MapSession.FoundTarget found = session.found;
+        if (found == null) {
+            return;
+        }
+        int x = guiX(found.x()), y = guiY(found.z());
+        graphics.outline(x - 10, y - 10, 20, 20, FOUND_COLOR);
+        graphics.outline(x - 11, y - 11, 22, 22, 0xFF000000);
+    }
+
+    private @Nullable Waypoint waypointNear(List<Waypoint> waypoints, double mouseX, double mouseY) {
+        for (Waypoint waypoint : waypoints) {
+            if (Math.abs(guiX(waypoint.x) - mouseX) <= ICON / 2 && Math.abs(guiY(waypoint.z) - mouseY) <= ICON / 2) {
+                return waypoint;
+            }
+        }
+        return null;
+    }
+
     private StructureFinder.@Nullable Found markerNear(List<StructureFinder.Found> markers, int mouseX, int mouseY) {
         for (StructureFinder.Found found : markers) {
             if (Math.abs(guiX(found.x()) - mouseX) <= ICON / 2 && Math.abs(guiY(found.z()) - mouseY) <= ICON / 2) {
@@ -206,6 +280,13 @@ final class MapWidget extends AbstractWidget {
 
     private void drawStrip(GuiGraphicsExtractor graphics, MapTiles tiles) {
         graphics.fill(getX(), getY(), getRight(), getY() + STRIP_HEIGHT, STRIP_COLOR);
+        if (session.searching) {
+            graphics.text(font, Component.translatable("cubeium.find.searching"), getX() + 4, getY() + 2, 0xFFA0A0A0);
+        } else if (session.found != null) {
+            MapSession.FoundTarget found = session.found;
+            graphics.text(font, Component.translatable("cubeium.find.result", found.label(), found.x(), found.z(), found.distance()),
+                    getX() + 4, getY() + 2, 0xFFFF7777);
+        }
         if (!hasHovered) {
             return;
         }
@@ -328,6 +409,22 @@ final class MapWidget extends AbstractWidget {
         items.add(new ContextMenu.Item(Component.translatable("cubeium.menu.copy"),
                 () -> Minecraft.getInstance().keyboardHandler.setClipboard(wx + " " + wz)));
         items.add(new ContextMenu.Item(Component.translatable("cubeium.menu.center"), () -> session.view.center(wx + 0.5, wz + 0.5)));
+        List<Waypoint> waypoints = CubeiumConfig.get().waypoints(session.worldKey == null ? "none" : session.worldKey);
+        Waypoint near = waypointNear(waypoints.stream().filter(w -> session.dimension.key().equals(w.dimension)).toList(), x, y);
+        if (near != null) {
+            items.add(new ContextMenu.Item(Component.translatable("cubeium.menu.remove_waypoint", near.name), () -> {
+                waypoints.remove(near);
+                CubeiumConfig.get().save();
+                onWaypointsChanged.run();
+            }));
+        } else {
+            items.add(new ContextMenu.Item(Component.translatable("cubeium.menu.add_waypoint"), () -> {
+                String name = Component.translatable("cubeium.waypoints.default_name", waypoints.size() + 1).getString();
+                waypoints.add(new Waypoint(name, wx, wz, session.dimension.key(), waypoints.size()));
+                CubeiumConfig.get().save();
+                onWaypointsChanged.run();
+            }));
+        }
         if (SeedMapScreen.canTeleport()) {
             items.add(new ContextMenu.Item(Component.translatable("cubeium.menu.teleport"), () -> {
                 SeedMapScreen.teleport(session.dimension, wx, wz);

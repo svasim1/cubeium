@@ -19,6 +19,7 @@ import cubeium.cubeium.config.CubeiumConfig;
 import cubeium.cubeium.screen.SeedMapScreen;
 import cubeium.cubeium.world.Biomes;
 import cubeium.cubeium.world.Dimension;
+import cubeium.cubeium.world.SlimeChunks;
 import cubeium.cubeium.world.StructureFinder;
 import cubeium.cubeium.world.StructureKind;
 import cubeium.cubeium.world.WorldGenerator;
@@ -46,6 +47,7 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.levelgen.WorldOptions;
+import net.minecraft.world.level.levelgen.WorldgenRandom;
 import net.minecraft.world.level.levelgen.structure.BuiltinStructures;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureCheckResult;
@@ -77,6 +79,7 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
             List<String> failures = new ArrayList<>();
             failures.addAll(singleplayer.getServer().computeOnServer(CubeiumClientGameTest::compareBiomes));
             failures.addAll(singleplayer.getServer().computeOnServer(CubeiumClientGameTest::compareStructures));
+            failures.addAll(singleplayer.getServer().computeOnServer(CubeiumClientGameTest::compareSlimeChunks));
             if (!failures.isEmpty()) {
                 throw new AssertionError(String.join("\n", failures));
             }
@@ -148,6 +151,22 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
     }
 
     private static final Map<WorldGenerator, MemorySegment> GENERATORS = new LinkedHashMap<>();
+
+    // ---- slime chunks ----
+
+    private static List<String> compareSlimeChunks(MinecraftServer server) {
+        long seed = server.overworld().getSeed();
+        int mismatches = 0, slime = 0;
+        for (int cx = -100; cx < 100; cx++) {
+            for (int cz = -100; cz < 100; cz++) {
+                boolean minecraft = WorldgenRandom.seedSlimeChunk(cx, cz, seed, 987234911L).nextInt(10) == 0;
+                if (minecraft) slime++;
+                if (minecraft != SlimeChunks.isSlimeChunk(seed, cx, cz)) mismatches++;
+            }
+        }
+        Cubeium.LOGGER.info("[GameTest] Slime chunks: {} of 40000 chunks, {} mismatches", slime, mismatches);
+        return mismatches == 0 ? List.of() : List.of("slime chunks: " + mismatches + " mismatches");
+    }
 
     // ---- structures ----
 
@@ -341,6 +360,13 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
 
     // ---- UI ----
 
+    /** Clicks at a GUI-pixel offset from a window position. */
+    private static void clickGui(ClientGameTestContext context, double[] window, int dx, int dy) {
+        double scale = context.computeOnClient(client -> (double) client.getWindow().getGuiScale());
+        context.getInput().setCursorPos(window[0] + dx * scale, window[1] + dy * scale);
+        context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_LEFT);
+    }
+
     /** Clicks the widget whose label uses a translation key, wherever it sits in the screen (tabs too). */
     private static void click(ClientGameTestContext context, String translationKey) {
         double[] position = context.computeOnClient(client -> {
@@ -434,6 +460,29 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
         context.getInput().pressMouse(InputConstants.MOUSE_BUTTON_RIGHT);
         context.waitTicks(5);
         context.takeScreenshot("cubeium-dark-labels-menu");
+
+        // "Add waypoint here" is the third menu row (menu opens 6 px below-right of the cursor).
+        clickGui(context, center, 16, 6 + 12 + 4 + 2 * 12 + 4);
+        context.waitTicks(10);
+        click(context, "cubeium.tab.waypoints");
+        context.waitTicks(10);
+        context.takeScreenshot("cubeium-waypoints");
+
+        click(context, "cubeium.tab.map");
+        context.waitTicks(5);
+        click(context, "cubeium.find.go");
+        context.waitTicks(100);
+        context.takeScreenshot("cubeium-find-nearest");
+
+        click(context, "cubeium.map.slime_chunks");
+        context.getInput().setCursorPos(center[0], center[1]);
+        context.getInput().scroll(6);
+        context.waitTicks(60);
+        context.takeScreenshot("cubeium-slime-chunks");
+
+        click(context, "cubeium.map.collapse_panel");
+        context.waitTicks(40);
+        context.takeScreenshot("cubeium-panel-collapsed");
         context.getInput().pressKey(InputConstants.KEY_ESCAPE);
         context.waitTicks(5);
         context.setScreen(() -> null);
