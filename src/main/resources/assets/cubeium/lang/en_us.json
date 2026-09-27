@@ -62,5 +62,6 @@
   "cubeium.structure.nether_fortress": "Nether Fortress",
   "cubeium.structure.bastion_remnant": "Bastion Remnant",
   "cubeium.structure.ruined_portal_nether": "Ruined Portal",
-  "cubeium.structure.end_city": "End City"
+  "cubeium.structure.end_city": "End City",
+  "cubeium.structure.end_city_ship": "End City with Ship"
 }

@@ -42,11 +42,16 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.StructureTags;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.structure.BuiltinStructures;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureCheckResult;
+import net.minecraft.world.level.levelgen.structure.StructurePiece;
+import net.minecraft.world.level.levelgen.structure.StructureStart;
+import net.minecraft.world.level.levelgen.structure.TemplateStructurePiece;
 import net.minecraft.world.level.levelgen.structure.placement.ConcentricRingsStructurePlacement;
 import net.minecraft.world.level.levelgen.structure.placement.StructurePlacement;
 
@@ -197,6 +202,10 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
                         break;
                     }
                 }
+                if (minecraft && (kind == StructureKind.END_CITY || kind == StructureKind.END_CITY_SHIP)) {
+                    Boolean ship = generatedShip(level, structures.getFirst(), chunk);
+                    minecraft = ship != null && ship == (kind == StructureKind.END_CITY_SHIP);
+                }
                 if (minecraft) {
                     present++;
                 }
@@ -234,6 +243,34 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
         Cubeium.LOGGER.info("[GameTest] STRONGHOLD: {}/{} positions match Minecraft's rings", matches, minecraft.size());
         if (matches != minecraft.size() || ours.length / 2 != minecraft.size()) {
             failures.add("STRONGHOLD: " + matches + "/" + minecraft.size() + " match");
+        }
+    }
+
+    /**
+     * Lets the server generate the chunk up to structure starts, exactly as in normal play, and
+     * reports whether its end city has a ship (null: no end city starts there).
+     */
+    private static Boolean generatedShip(ServerLevel level, Holder<Structure> endCity, ChunkPos chunk) {
+        ChunkAccess access = level.getChunk(chunk.x(), chunk.z(), ChunkStatus.STRUCTURE_STARTS, true);
+        StructureStart start = access == null ? null : access.getStartForStructure(endCity.value());
+        if (start == null || !start.isValid()) {
+            return null;
+        }
+        for (StructurePiece piece : start.getPieces()) {
+            if (piece instanceof TemplateStructurePiece template && "ship".equals(templateName(template))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String templateName(TemplateStructurePiece piece) {
+        try {
+            Field field = TemplateStructurePiece.class.getDeclaredField("templateName");
+            field.setAccessible(true);
+            return (String) field.get(piece);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
         }
     }
 
@@ -276,7 +313,7 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
             case NETHER_FORTRESS -> "FORTRESS";
             case BASTION_REMNANT -> "BASTION_REMNANT";
             case RUINED_PORTAL_NETHER -> "RUINED_PORTAL_NETHER";
-            case END_CITY -> "END_CITY";
+            case END_CITY, END_CITY_SHIP -> "END_CITY";
             default -> throw new IllegalArgumentException(kind.toString());
         };
         List<Holder<Structure>> holders = new ArrayList<>();

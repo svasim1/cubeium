@@ -139,6 +139,20 @@ class WorldGeneratorTest {
     }
 
     @Test
+    void endCitiesSplitByShip() {
+        StructureFinder finder = new StructureFinder(new WorldGenerator(MC, 7L, Dimension.END));
+        List<StructureFinder.Found> plain = finder.find(StructureKind.END_CITY, -20_000, -20_000, 20_000, 20_000);
+        List<StructureFinder.Found> ships = finder.find(StructureKind.END_CITY_SHIP, -20_000, -20_000, 20_000, 20_000);
+        assertFalse(plain.isEmpty());
+        assertFalse(ships.isEmpty());
+        Set<Long> plainPositions = new HashSet<>();
+        plain.forEach(f -> plainPositions.add(((long) f.x() << 32) | (f.z() & 0xFFFFFFFFL)));
+        for (StructureFinder.Found ship : ships) {
+            assertFalse(plainPositions.contains(((long) ship.x() << 32) | (ship.z() & 0xFFFFFFFFL)), "a city is either with or without a ship");
+        }
+    }
+
+    @Test
     void generatorsAreSafeAcrossThreads() throws Exception {
         WorldGenerator a = new WorldGenerator(MC, 1L, Dimension.OVERWORLD);
         WorldGenerator b = new WorldGenerator(MC, 2L, Dimension.OVERWORLD);

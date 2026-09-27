@@ -7,6 +7,7 @@ import java.util.Arrays;
 
 import dev.xpple.cubiomes.Cubiomes;
 import dev.xpple.cubiomes.Generator;
+import dev.xpple.cubiomes.Piece;
 import dev.xpple.cubiomes.Pos;
 import dev.xpple.cubiomes.Range;
 import dev.xpple.cubiomes.StrongholdIter;
@@ -107,6 +108,20 @@ public final class WorldGenerator {
             return Cubiomes.isViableStructureTerrain(structureType, g, blockX, blockZ) != 0;
         }
         return true;
+    }
+
+    /** Whether the end city starting in this block's chunk has a ship. */
+    boolean endCityHasShip(int blockX, int blockZ) {
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment pieces = Piece.allocateArray(Cubiomes.END_CITY_PIECES_MAX(), arena);
+            int count = Cubiomes.getEndCityPieces(pieces, seed, blockX >> 4, blockZ >> 4);
+            for (int i = 0; i < count; i++) {
+                if (Piece.type(pieces.asSlice(i * Piece.sizeof(), Piece.sizeof())) == Cubiomes.END_SHIP()) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
     /** End cities additionally need a sufficiently high island surface. */

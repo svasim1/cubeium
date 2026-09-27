@@ -71,17 +71,22 @@ public final class MapTiles implements AutoCloseable {
         paletteVersion++;
     }
 
-    /** Draws the view into the GUI rectangle. Render thread only. */
-    public void draw(GuiGraphicsExtractor graphics, int x, int y, int width, int height, MapView view) {
+    /**
+     * Draws the view into the GUI rectangle. Tiles are chosen and drawn per screen pixel rather
+     * than per GUI pixel, so the map stays as sharp as the display allows at any GUI scale.
+     * Render thread only.
+     */
+    public void draw(GuiGraphicsExtractor graphics, int x, int y, int width, int height, MapView view, int guiScale) {
         frame++;
         uploadFinished();
 
-        double bpp = view.blocksPerPixel();
+        double bpp = view.blocksPerPixel() / guiScale;
         int scale = scaleFor(bpp);
-        double left = view.centerX() - width / 2.0 * bpp;
-        double top = view.centerZ() - height / 2.0 * bpp;
-        double right = left + width * bpp;
-        double bottom = top + height * bpp;
+        int px = x * guiScale, py = y * guiScale, pw = width * guiScale, ph = height * guiScale;
+        double left = view.centerX() - pw / 2.0 * bpp;
+        double top = view.centerZ() - ph / 2.0 * bpp;
+        double right = left + pw * bpp;
+        double bottom = top + ph * bpp;
 
         List<TileKey> visible = tilesIn(scale, left, top, right, bottom);
         Set<TileKey> nowWanted = new HashSet<>(visible);
@@ -93,9 +98,12 @@ public final class MapTiles implements AutoCloseable {
         }
 
         graphics.enableScissor(x, y, x + width, y + height);
+        graphics.pose().pushMatrix();
+        graphics.pose().scale(1f / guiScale);
         for (TileKey key : visible) {
-            drawTile(graphics, key, x, y, left, top, bpp);
+            drawTile(graphics, key, px, py, left, top, bpp);
         }
+        graphics.pose().popMatrix();
         graphics.disableScissor();
         evict();
     }
@@ -169,7 +177,7 @@ public final class MapTiles implements AutoCloseable {
         return count == 0 ? 0 : generationNanos.get() / 1e6 / count;
     }
 
-    /** The cubiomes scale used at a zoom: the coarsest whose texels are not larger than a pixel (min 4). */
+    /** The cubiomes scale for a zoom: the coarsest whose texels are not larger than a screen pixel (min 4). */
     static int scaleFor(double blocksPerPixel) {
         int best = SCALES[0];
         for (int scale : SCALES) {
