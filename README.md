@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/banner.png" alt="Cubeium" width="480"></p>
+<p align="center"><img src="docs/banner.png" alt="Cubeium" width="600"></p>
 
 # Cubeium
 
