@@ -1,5 +1,5 @@
 plugins {
-	id 'fabric-loom' version '1.10-SNAPSHOT'
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
 	id 'maven-publish'
 }
 
@@ -11,7 +11,12 @@ base {
 }
 
 repositories {
-	// Loom adds the repositories needed for Minecraft, Fabric and their libraries.
+	// cubiomes Java bindings (FFM) with bundled natives, https://github.com/xpple/cubiomes/tree/java-bindings
+	maven {
+		name = 'xpple'
+		url = 'https://maven.xpple.dev/maven2'
+		content { includeGroup 'dev.xpple' }
+	}
 }
 
 loom {
@@ -38,184 +43,38 @@ fabricApi {
 dependencies {
 	// To change the versions see the gradle.properties file
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
-	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+
+	// Bundled into the mod jar (jar-in-jar); the version pins the cubiomes commit after the '+'.
+	include implementation("dev.xpple:cubiomes:${project.cubiomes_version}")
 
 	testImplementation platform("org.junit:junit-bom:${project.junit_version}")
 	testImplementation "org.junit.jupiter:junit-jupiter"
 	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 }
 
-// ========================================
-// Native library (cubiomes + JNI bridge)
-// ========================================
-//
-// native/cubiomes   git submodule (xpple/cubiomes), pinned to a commit
-// native/           our CMakeLists.txt and cubeium_jni.c
-// native/prebuilt/  committed binaries for platforms that are not built locally
-//                   (currently the Windows DLL, see native/build-windows-dll.sh)
-//
-// When CMake is available, the library for the host platform is compiled and
-// packaged; prebuilt binaries fill in the other platforms.
-
-def nativeDir = file('native')
-def jniHeaderDir = layout.buildDirectory.dir('generated/jni')
-def generatedNativesDir = layout.buildDirectory.dir('generated/natives')
-
-def hostOs = {
-	def os = System.getProperty('os.name').toLowerCase(Locale.ROOT)
-	if (os.contains('windows')) return 'windows'
-	if (os.contains('mac') || os.contains('darwin')) return 'macos'
-	if (os.contains('linux')) return 'linux'
-	return os.replace(' ', '_')
-}()
-def hostArch = {
-	def arch = System.getProperty('os.arch').toLowerCase(Locale.ROOT)
-	if (arch in ['amd64', 'x86_64']) return 'x64'
-	if (arch in ['aarch64', 'arm64']) return 'arm64'
-	return arch
-}()
-def nativeLibName = [windows: 'libcubeium.dll', macos: 'libcubeium.dylib'].get(hostOs, 'libcubeium.so')
-def cmakeBuildDir = layout.buildDirectory.dir("native/${hostOs}-${hostArch}")
-
-def cmakeAvailable = {
-	try {
-		def proc = ['cmake', '--version'].execute()
-		proc.waitForProcessOutput(new StringBuilder(), new StringBuilder())
-		return proc.exitValue() == 0
-	} catch (IOException ignored) {
-		return false
-	}
-}()
-
-if (!cmakeAvailable) {
-	logger.warn("CMake not found: using prebuilt natives only (native/prebuilt). " +
-		"Install CMake and a C compiler (gcc/clang, or MinGW UCRT64 on Windows) to build the native library locally.")
-}
-
-// javac writes the JNI header for CubiomesInterface; the native build includes it.
-tasks.named('compileClientJava', JavaCompile) {
-	options.headerOutputDirectory = jniHeaderDir
-}
-
-tasks.register('configureNative', Exec) {
-	group = 'native'
-	description = 'Configures the native library build with CMake'
-	onlyIf { cmakeAvailable }
-	dependsOn 'compileClientJava'
-
-	inputs.file("${nativeDir}/CMakeLists.txt")
-	outputs.file(cmakeBuildDir.map { it.file('CMakeCache.txt') })
-
-	doFirst {
-		if (!file("${nativeDir}/cubiomes/generator.h").exists()) {
-			throw new GradleException("native/cubiomes is empty. Run: git submodule update --init --recursive")
-		}
-	}
-
-	def jdkInclude = new File(System.getProperty('java.home'), 'include').absolutePath
-	def args = ['cmake', '-S', nativeDir.absolutePath, '-B', cmakeBuildDir.get().asFile.absolutePath,
-		'-DCMAKE_BUILD_TYPE=Release',
-		"-DCUBEIUM_JNI_HEADER_DIR=${jniHeaderDir.get().asFile.absolutePath}",
-		"-DCUBEIUM_JNI_INCLUDE=${jdkInclude}"]
-	if (hostOs == 'windows') {
-		args += ['-G', 'MinGW Makefiles']
-	}
-	commandLine args
-}
-
-tasks.register('buildNative', Exec) {
-	group = 'native'
-	description = 'Compiles the native library for the host platform'
-	onlyIf { cmakeAvailable }
-	dependsOn 'configureNative'
-
-	inputs.files(fileTree(nativeDir) {
-		include '*.c', '*.h', 'CMakeLists.txt', 'cubiomes/**/*.c', 'cubiomes/**/*.h'
-	})
-	inputs.dir(jniHeaderDir)
-	outputs.file(cmakeBuildDir.map { it.file(nativeLibName) })
-
-	commandLine 'cmake', '--build', cmakeBuildDir.get().asFile.absolutePath, '--parallel'
-}
-
-tasks.register('stageNative', Copy) {
-	group = 'native'
-	description = 'Stages the host native library for packaging'
-	onlyIf { cmakeAvailable }
-	dependsOn 'buildNative'
-
-	from(cmakeBuildDir) { include nativeLibName }
-	into generatedNativesDir.map { it.dir("natives/${hostOs}/${hostArch}") }
-}
-
-// Warns when a prebuilt binary was built from different sources than the current ones.
-tasks.register('checkPrebuiltNatives') {
-	group = 'native'
-	description = 'Warns if native/prebuilt binaries are out of date'
-
-	def prebuiltDir = file("${nativeDir}/prebuilt")
-	inputs.files(fileTree(prebuiltDir))
-	inputs.files(fileTree(nativeDir) { include 'cubeium_jni.c', 'CMakeLists.txt' })
-	inputs.file('src/client/java/cubeium/cubeium/world/CubiomesInterface.java')
-
-	doLast {
-		def expected = nativeSourceFingerprint(nativeDir)
-		fileTree(prebuiltDir) { include '**/BUILD_INFO.txt' }.each { info ->
-			def recorded = info.readLines().find { it.startsWith('sources=') }?.substring('sources='.length())
-			if (recorded != expected) {
-				logger.warn("Prebuilt native in ${info.parentFile} is out of date with the native sources. " +
-					"Rebuild it with native/build-windows-dll.sh (see its header).")
-			}
-		}
-	}
-}
-
-// Fingerprint of everything that affects the native binary. Keep in sync with native/build-windows-dll.sh.
-def nativeSourceFingerprint(File nativeDir) {
-	def submoduleCommit = ['git', '-C', new File(nativeDir, 'cubiomes').absolutePath, 'rev-parse', 'HEAD'].execute().text.trim()
-	def digest = java.security.MessageDigest.getInstance('SHA-256')
-	['native/cubeium_jni.c', 'native/CMakeLists.txt', 'src/client/java/cubeium/cubeium/world/CubiomesInterface.java'].each {
-		digest.update(file(it).text.replace('\r\n', '\n').getBytes('UTF-8'))
-	}
-	digest.update(submoduleCommit.getBytes('UTF-8'))
-	return digest.digest().encodeHex().toString()
-}
-
-tasks.named('processClientResources', ProcessResources) {
-	dependsOn 'stageNative', 'checkPrebuiltNatives'
-	// A freshly built host library wins over a prebuilt one for the same platform.
-	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-	from(generatedNativesDir)
-	from("${nativeDir}/prebuilt") {
-		exclude '**/BUILD_INFO.txt'
-		into 'natives'
-	}
-}
-
 processResources {
-	inputs.property "version", project.version
+	def version = project.version
+	inputs.property "version", version
 
 	filesMatching("fabric.mod.json") {
-		expand "version": inputs.properties.version
+		expand "version": version
 	}
 }
 
 tasks.withType(JavaCompile).configureEach {
-	it.options.release = 21
+	it.options.release = 25
 }
 
 java {
-	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
-	// if it is present.
 	withSourcesJar()
 
-	sourceCompatibility = JavaVersion.VERSION_21
-	targetCompatibility = JavaVersion.VERSION_21
+	sourceCompatibility = JavaVersion.VERSION_25
+	targetCompatibility = JavaVersion.VERSION_25
 }
 
-// Tests exercise the client-side JNI bindings against the real native library.
+// Unit tests exercise the client-side cubiomes bindings (no Minecraft needed).
 sourceSets {
 	test {
 		compileClasspath += sourceSets.client.output
@@ -225,21 +84,19 @@ sourceSets {
 
 test {
 	useJUnitPlatform()
-	onlyIf { cmakeAvailable || hostOs == 'windows' }
+	// The bindings call restricted FFM methods; allow them without warnings.
+	jvmArgs '--enable-native-access=ALL-UNNAMED'
 }
 
 jar {
-	inputs.property "archivesName", project.base.archivesName
+	def projectName = project.base.archivesName.get()
+	inputs.property "projectName", projectName
 
 	from("LICENSE") {
-		rename { "${it}_${inputs.properties.archivesName}"}
-	}
-	from("native/cubiomes/LICENSE") {
-		rename { "LICENSE_cubiomes" }
+		rename { "${it}_$projectName" }
 	}
 }
 
-// configure the maven publication
 publishing {
 	publications {
 		create("mavenJava", MavenPublication) {
@@ -249,6 +106,5 @@ publishing {
 	}
 
 	repositories {
-		// Add repositories to publish to here.
 	}
 }
