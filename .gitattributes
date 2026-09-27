@@ -1,9 +1,16 @@
-#
-# https://help.github.com/articles/dealing-with-line-endings/
-#
-# Linux start script should use lf
+# Normalize all text files to LF in the repository; each checkout picks its
+# native line endings (CRLF on Windows with core.autocrlf, LF elsewhere).
+* text=auto
+
+# Linux start script must use LF
 /gradlew        text eol=lf
 
-# These are Windows script files and should use crlf
+# Windows scripts should use CRLF
 *.bat           text eol=crlf
 
+# Binaries
+*.dll           binary
+*.so            binary
+*.dylib         binary
+*.png           binary
+*.jar           binary
