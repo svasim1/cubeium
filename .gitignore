@@ -40,11 +40,11 @@ replay_*.log
 *.jfr
 
 # Instructions
-instructions/
-documentation.txt
-documentation/
+/instructions/
+/documentation.txt
+/documentation/
 
 # Cubiomes
-cubiomes/
-amidst/
+/cubiomes/
+/amidst/
 cubiomes-viewer/

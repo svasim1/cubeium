@@ -1,106 +1,109 @@
 package cubeium.cubeium.world;
 
-import cubeium.cubeium.Cubeium;
-
-import java.io.*;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
+import java.util.Locale;
+
+import cubeium.cubeium.Cubeium;
 
 /**
- * Utility class for loading native libraries from JAR resources
+ * Loads the bundled native library (natives/&lt;os&gt;/&lt;arch&gt;/libcubeium.&lt;ext&gt; in the jar).
+ *
+ * <p>The library is extracted to {@code <tmpdir>/cubeium-natives/<sha256>/} and reused on later
+ * launches. Keying the directory by content hash means nothing has to be deleted on exit, which
+ * Windows does not allow for a loaded DLL anyway.
  */
-public class NativeLibraryLoader {
-    
-    private static final String TEMP_DIR_PREFIX = "cubeium_natives_";
-    private static Path tempDir = null;
-    
-    /**
-     * Load a native library from JAR resources
-     * @param libraryName Base name of the library (without extension)
-     * @param resourcePath Path to the library resource within the JAR
-     * @throws IOException If library cannot be loaded
-     */
-    public static void loadLibraryFromResources(String libraryName, String resourcePath) throws IOException {
-        // Get the resource as a stream
-        InputStream libraryStream = NativeLibraryLoader.class.getResourceAsStream(resourcePath);
-        
-        if (libraryStream == null) {
-            throw new IOException("Native library not found in resources: " + resourcePath);
-        }
-        
-        try {
-            // Create temporary directory if it doesn't exist
-            if (tempDir == null || !Files.exists(tempDir)) {
-                tempDir = Files.createTempDirectory(TEMP_DIR_PREFIX);
-                tempDir.toFile().deleteOnExit();
-                
-                // Add shutdown hook to clean up temp directory
-                Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                    try {
-                        deleteDirectory(tempDir);
-                    } catch (Exception e) {
-                        Cubeium.LOGGER.warn("Failed to clean up temporary native library directory: " + tempDir, e);
-                    }
-                }));
-            }
-            
-            // Extract library name and extension from resource path
-            String fileName = resourcePath.substring(resourcePath.lastIndexOf('/') + 1);
-            Path tempLibraryPath = tempDir.resolve(fileName);
-            
-            // Copy library from JAR to temporary file
-            Files.copy(libraryStream, tempLibraryPath, StandardCopyOption.REPLACE_EXISTING);
-            
-            // Make the file executable (important for Unix systems)
-            tempLibraryPath.toFile().setExecutable(true);
-            tempLibraryPath.toFile().deleteOnExit();
-            
-            // Load the library
-            System.load(tempLibraryPath.toAbsolutePath().toString());
-            
-            Cubeium.LOGGER.info("Successfully loaded native library: " + fileName + " from " + tempLibraryPath);
-            
-        } finally {
-            // Close the stream
-            try {
-                libraryStream.close();
-            } catch (IOException e) {
-                Cubeium.LOGGER.warn("Failed to close library stream", e);
-            }
-        }
+final class NativeLibraryLoader {
+    private static boolean loaded;
+
+    private NativeLibraryLoader() {
     }
-    
-    /**
-     * Recursively delete a directory and its contents
-     * @param dir Directory to delete
-     * @throws IOException If deletion fails
-     */
-    private static void deleteDirectory(Path dir) throws IOException {
-        if (!Files.exists(dir)) {
+
+    static synchronized void load() {
+        if (loaded) {
             return;
         }
-        
-        Files.walk(dir)
-            .map(Path::toFile)
-            .sorted((o1, o2) -> -o1.compareTo(o2)) // Delete files before directories
-            .forEach(File::delete);
+
+        String resourcePath = "/natives/" + osName() + "/" + archName() + "/" + libraryFileName();
+        byte[] library;
+        try (InputStream in = NativeLibraryLoader.class.getResourceAsStream(resourcePath)) {
+            if (in == null) {
+                throw new UnsatisfiedLinkError("Cubeium has no native library for this platform ("
+                        + System.getProperty("os.name") + ", " + System.getProperty("os.arch")
+                        + "): missing " + resourcePath);
+            }
+            library = in.readAllBytes();
+        } catch (IOException e) {
+            throw linkError("Failed to read " + resourcePath, e);
+        }
+
+        Path target = Path.of(System.getProperty("java.io.tmpdir"), "cubeium-natives", sha256(library), libraryFileName());
+        try {
+            if (!Files.exists(target) || Files.size(target) != library.length) {
+                Files.createDirectories(target.getParent());
+                Path tmp = Files.createTempFile(target.getParent(), "libcubeium", ".tmp");
+                Files.write(tmp, library);
+                try {
+                    Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE);
+                } catch (IOException e) {
+                    // Another instance may have extracted (and loaded) the same file concurrently.
+                    Files.deleteIfExists(tmp);
+                    if (!Files.exists(target)) {
+                        throw e;
+                    }
+                }
+            }
+        } catch (IOException e) {
+            throw linkError("Failed to extract native library to " + target, e);
+        }
+
+        System.load(target.toAbsolutePath().toString());
+        loaded = true;
+        Cubeium.LOGGER.info("Loaded native library {}", target);
     }
-    
-    /**
-     * Check if a native library is available in resources
-     * @param resourcePath Path to the library resource
-     * @return True if the library exists in resources
-     */
-    public static boolean isLibraryAvailable(String resourcePath) {
-        return NativeLibraryLoader.class.getResource(resourcePath) != null;
+
+    static String osName() {
+        String os = System.getProperty("os.name").toLowerCase(Locale.ROOT);
+        if (os.contains("windows")) return "windows";
+        if (os.contains("mac") || os.contains("darwin")) return "macos";
+        if (os.contains("linux")) return "linux";
+        return os.replace(' ', '_');
     }
-    
-    /**
-     * Get the temporary directory used for native libraries
-     * @return Path to temp directory, or null if not created yet
-     */
-    public static Path getTempDirectory() {
-        return tempDir;
+
+    static String archName() {
+        String arch = System.getProperty("os.arch").toLowerCase(Locale.ROOT);
+        return switch (arch) {
+            case "amd64", "x86_64" -> "x64";
+            case "aarch64", "arm64" -> "arm64";
+            default -> arch;
+        };
+    }
+
+    private static String libraryFileName() {
+        return switch (osName()) {
+            case "windows" -> "libcubeium.dll";
+            case "macos" -> "libcubeium.dylib";
+            default -> "libcubeium.so";
+        };
+    }
+
+    private static String sha256(byte[] data) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(data));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static UnsatisfiedLinkError linkError(String message, Throwable cause) {
+        UnsatisfiedLinkError error = new UnsatisfiedLinkError(message + ": " + cause.getMessage());
+        error.initCause(cause);
+        return error;
     }
 }
