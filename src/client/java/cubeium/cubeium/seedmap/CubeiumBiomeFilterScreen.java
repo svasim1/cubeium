@@ -57,37 +57,42 @@
         protected void init() {
             super.init();
 
-            int totalButtonsWidth = TOP_BUTTON_WIDTH * 5 + TOP_BUTTON_GAP * 4;
+            // The toggle label is longer than the others; size it to fit either state.
+            int toggleWidth = Math.max(TOP_BUTTON_WIDTH, 10 + Math.max(
+                textRenderer.getWidth(filterEnabledLabel(true)), textRenderer.getWidth(filterEnabledLabel(false))));
+            int step = TOP_BUTTON_WIDTH + TOP_BUTTON_GAP;
+            int totalButtonsWidth = toggleWidth + TOP_BUTTON_GAP + step * 4 - TOP_BUTTON_GAP;
             int buttonX = (width - totalButtonsWidth) / 2;
+            int otherX = buttonX + toggleWidth + TOP_BUTTON_GAP;
             int buttonY = 40;
 
             enabledButton = ButtonWidget.builder(filterEnabledLabel(), button -> {
                 session.setBiomeFilteringEnabled(!session.isBiomeFilteringEnabled());
                 button.setMessage(filterEnabledLabel());
                 CubeiumSeedMapSettingsStore.savePersistentSettings(session);
-            }).dimensions(buttonX, buttonY, TOP_BUTTON_WIDTH, TOP_BUTTON_HEIGHT).build();
+            }).dimensions(buttonX, buttonY, toggleWidth, TOP_BUTTON_HEIGHT).build();
             addDrawableChild(enabledButton);
 
             selectAllButton = ButtonWidget.builder(Text.translatable("cubeium.biome_filter.select_all"), button -> {
                 session.selectAllBiomes(CubeiumBiomeFilterCatalog.flatten(groups));
                 CubeiumSeedMapSettingsStore.savePersistentSettings(session);
-            }).dimensions(buttonX + TOP_BUTTON_WIDTH + TOP_BUTTON_GAP, buttonY, TOP_BUTTON_WIDTH, TOP_BUTTON_HEIGHT).build();
+            }).dimensions(otherX, buttonY, TOP_BUTTON_WIDTH, TOP_BUTTON_HEIGHT).build();
             addDrawableChild(selectAllButton);
 
             clearButton = ButtonWidget.builder(Text.translatable("cubeium.biome_filter.clear"), button -> {
                 session.clearBiomes();
                 CubeiumSeedMapSettingsStore.savePersistentSettings(session);
-            }).dimensions(buttonX + (TOP_BUTTON_WIDTH + TOP_BUTTON_GAP) * 2, buttonY, TOP_BUTTON_WIDTH, TOP_BUTTON_HEIGHT).build();
+            }).dimensions(otherX + step, buttonY, TOP_BUTTON_WIDTH, TOP_BUTTON_HEIGHT).build();
             addDrawableChild(clearButton);
 
             invertButton = ButtonWidget.builder(Text.translatable("cubeium.biome_filter.invert"), button -> {
                 session.invertBiomes(CubeiumBiomeFilterCatalog.flatten(groups));
                 CubeiumSeedMapSettingsStore.savePersistentSettings(session);
-            }).dimensions(buttonX + (TOP_BUTTON_WIDTH + TOP_BUTTON_GAP) * 3, buttonY, TOP_BUTTON_WIDTH, TOP_BUTTON_HEIGHT).build();
+            }).dimensions(otherX + step * 2, buttonY, TOP_BUTTON_WIDTH, TOP_BUTTON_HEIGHT).build();
             addDrawableChild(invertButton);
 
             doneButton = ButtonWidget.builder(Text.translatable("cubeium.button.done"), button -> close())
-                .dimensions(buttonX + (TOP_BUTTON_WIDTH + TOP_BUTTON_GAP) * 4, buttonY, TOP_BUTTON_WIDTH, TOP_BUTTON_HEIGHT)
+                .dimensions(otherX + step * 3, buttonY, TOP_BUTTON_WIDTH, TOP_BUTTON_HEIGHT)
                 .build();
             addDrawableChild(doneButton);
 
@@ -103,7 +108,16 @@
         }
 
         private Text filterEnabledLabel() {
-            return Text.translatable("cubeium.biome_filter.enabled", session.isBiomeFilteringEnabled() ? Text.translatable("cubeium.state.on") : Text.translatable("cubeium.state.off"));
+            return filterEnabledLabel(session.isBiomeFilteringEnabled());
+        }
+
+        private static Text filterEnabledLabel(boolean enabled) {
+            return Text.translatable("cubeium.biome_filter.enabled", Text.translatable(enabled ? "cubeium.state.on" : "cubeium.state.off"));
+        }
+
+        @Override
+        public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) {
+            // Drawn in render() instead; the default in-world background would blur everything drawn before it.
         }
 
         @Override
