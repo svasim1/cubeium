@@ -7,6 +7,7 @@ import java.util.OptionalLong;
 
 import com.mojang.blaze3d.platform.InputConstants;
 
+import cubeium.cubeium.CubeiumClient;
 import cubeium.cubeium.config.CubeiumConfig;
 import cubeium.cubeium.config.Waypoint;
 import cubeium.cubeium.map.MapView;
@@ -60,7 +61,7 @@ public final class SeedMapScreen extends Screen {
 
     private final MapSession session = MapSession.get();
     private final CubeiumConfig config = CubeiumConfig.get();
-    private TabManager tabManager = new TabManager(this::addRenderableWidget, this::removeWidget);
+    private TabManager tabManager;
     private final List<SwatchCheckbox> biomeBoxes = new ArrayList<>();
     private String worldKey = "";
     private @Nullable EditBox seedBox;
@@ -158,7 +159,7 @@ public final class SeedMapScreen extends Screen {
         tabBar = addRenderableWidget(PanelTabBar.create(tabManager, PAD, tabBarY, mapWidth, tabs));
         tabManager.setTabArea(new ScreenRectangle(PAD, panelTop + 4, mapWidth, contentHeight - 8));
         if (!collapsed) {
-            tabBar.selectTab(Math.min(selectedTab, tabs.size() - 1), false);
+            tabBar.selectTab(Math.clamp(selectedTab, 0, tabs.size() - 1), false);
         }
         Identifier toggleSprite = collapsed ? EXPAND_SPRITE : COLLAPSE_SPRITE;
         addRenderableWidget(SpriteIconButton.builder(Component.translatable(collapsed ? "cubeium.map.expand_panel" : "cubeium.map.collapse_panel"),
@@ -208,7 +209,7 @@ public final class SeedMapScreen extends Screen {
             session.view.center(session.view.centerX() * 8, session.view.centerZ() * 8);
         }
         session.show(session.seed(), dimension);
-        rebuildWidgets(); // structure and biome lists depend on the dimension
+        rebuildPending = true; // structure and biome lists depend on the dimension
     }
 
     private void centerOnPlayer() {
@@ -492,6 +493,10 @@ public final class SeedMapScreen extends Screen {
         if (tabBar != null && tabBar.keyPressed(event)) {
             return true;
         }
+        if (!(getFocused() instanceof EditBox) && CubeiumClient.openMapKey().matches(event)) {
+            onClose(); // the key that opens the map also closes it
+            return true;
+        }
         if (!(getFocused() instanceof EditBox) && map != null) {
             double step = 64 * session.view.blocksPerPixel();
             switch (event.key()) {
@@ -510,9 +515,6 @@ public final class SeedMapScreen extends Screen {
 
     @Override
     public void removed() {
-        if (tabBar != null) {
-            selectedTab = tabBar.getTabs().indexOf(tabManager.getCurrentTab());
-        }
         if (pendingSeedText != null) {
             applySeed(pendingSeedText);
         }

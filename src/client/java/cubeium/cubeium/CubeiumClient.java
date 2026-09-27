@@ -13,6 +13,10 @@ public class CubeiumClient implements ClientModInitializer {
     private static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(Cubeium.MOD_ID, "main"));
     private static KeyMapping openMap;
 
+    public static KeyMapping openMapKey() {
+        return openMap;
+    }
+
     @Override
     public void onInitializeClient() {
         openMap = KeyMappingHelper.registerKeyMapping(new KeyMapping(
