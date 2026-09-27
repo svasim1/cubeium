@@ -29,7 +29,9 @@ public enum StructureKind {
     NETHER_FORTRESS("nether_fortress", Dimension.NETHER, Cubiomes::Fortress),
     BASTION_REMNANT("bastion_remnant", Dimension.NETHER, Cubiomes::Bastion),
     RUINED_PORTAL_NETHER("ruined_portal_nether", Dimension.NETHER, Cubiomes::Ruined_Portal_N),
-    END_CITY("end_city", Dimension.END, Cubiomes::End_City);
+    END_CITY("end_city", Dimension.END, Cubiomes::End_City),
+    /** End cities that include a ship (elytra); the plain kind lists the ones without. */
+    END_CITY_SHIP("end_city_ship", Dimension.END, Cubiomes::End_City);
 
     private final String key;
     private final Dimension dimension;

@@ -106,7 +106,11 @@ public final class StructureFinder {
             x = Pos.x(pos);
             z = Pos.z(pos);
         }
-        boolean viable = kind == StructureKind.END_CITY ? world.isViableEndCity(x, z) : world.isViableStructure(type, x, z);
+        boolean viable = switch (kind) {
+            case END_CITY -> world.isViableEndCity(x, z) && !world.endCityHasShip(x, z);
+            case END_CITY_SHIP -> world.isViableEndCity(x, z) && world.endCityHasShip(x, z);
+            default -> world.isViableStructure(type, x, z);
+        };
         return viable ? new int[] {x, z} : NONE;
     }
 

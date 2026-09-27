@@ -88,7 +88,7 @@ final class MapWidget extends AbstractWidget {
             return;
         }
 
-        tiles.draw(graphics, getX(), getY(), width, height, session.view);
+        tiles.draw(graphics, getX(), getY(), width, height, session.view, Minecraft.getInstance().getWindow().getGuiScale());
         graphics.enableScissor(getX(), getY(), getRight(), getBottom());
         CubeiumConfig config = CubeiumConfig.get();
         if (config.regionGrid) {
@@ -366,7 +366,8 @@ final class MapWidget extends AbstractWidget {
         icons.put(StructureKind.NETHER_FORTRESS, new ItemStack(Items.NETHER_BRICKS));
         icons.put(StructureKind.BASTION_REMNANT, new ItemStack(Items.GILDED_BLACKSTONE));
         icons.put(StructureKind.RUINED_PORTAL_NETHER, new ItemStack(Items.CRYING_OBSIDIAN));
-        icons.put(StructureKind.END_CITY, new ItemStack(Items.SHULKER_SHELL));
+        icons.put(StructureKind.END_CITY, new ItemStack(Items.PURPUR_BLOCK));
+        icons.put(StructureKind.END_CITY_SHIP, new ItemStack(Items.ELYTRA));
         return icons;
     }
 
