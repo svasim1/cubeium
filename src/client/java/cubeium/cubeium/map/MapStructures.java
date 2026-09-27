@@ -39,10 +39,6 @@ public final class MapStructures {
         this.finder = finder;
     }
 
-    public StructureFinder finder() {
-        return finder;
-    }
-
     /** Structures found so far; may lag behind the view by one search. */
     public List<StructureFinder.Found> found() {
         return found;

@@ -12,7 +12,6 @@ import cubeium.cubeium.config.CubeiumConfig;
 import cubeium.cubeium.config.Waypoint;
 import cubeium.cubeium.map.MapStructures;
 import cubeium.cubeium.map.MapTiles;
-import cubeium.cubeium.map.MapView;
 import cubeium.cubeium.world.Biomes;
 import cubeium.cubeium.world.Dimension;
 import cubeium.cubeium.world.SlimeChunks;
@@ -48,7 +47,6 @@ final class MapWidget extends AbstractWidget {
     private static final int SLIME_COLOR = 0x6040E040;
     /** Slime chunks are drawn once a chunk is at least this many GUI pixels wide. */
     private static final double SLIME_MIN_CHUNK_PIXELS = 6;
-    private static final int FOUND_COLOR = 0xFFFF5555;
 
     private final MapSession session;
     private final Font font;
@@ -113,7 +111,6 @@ final class MapWidget extends AbstractWidget {
         }
         List<StructureFinder.Found> markers = drawMarkers(graphics, config);
         List<Waypoint> waypoints = drawWaypoints(graphics);
-        drawFound(graphics);
         drawPlayer(graphics);
 
         hovering = isMouseOver(mouseX, mouseY) && (menu == null || !menu.contains(mouseX, mouseY));
@@ -234,16 +231,6 @@ final class MapWidget extends AbstractWidget {
         return WAYPOINT_ICONS[Math.floorMod(waypoint.color, WAYPOINT_ICONS.length)];
     }
 
-    private void drawFound(GuiGraphicsExtractor graphics) {
-        MapSession.FoundTarget found = session.found;
-        if (found == null) {
-            return;
-        }
-        int x = guiX(found.x()), y = guiY(found.z());
-        graphics.outline(x - 10, y - 10, 20, 20, FOUND_COLOR);
-        graphics.outline(x - 11, y - 11, 22, 22, 0xFF000000);
-    }
-
     private @Nullable Waypoint waypointNear(List<Waypoint> waypoints, double mouseX, double mouseY) {
         for (Waypoint waypoint : waypoints) {
             if (Math.abs(guiX(waypoint.x) - mouseX) <= ICON / 2 && Math.abs(guiY(waypoint.z) - mouseY) <= ICON / 2) {
@@ -285,13 +272,6 @@ final class MapWidget extends AbstractWidget {
 
     private void drawStrip(GuiGraphicsExtractor graphics, MapTiles tiles) {
         graphics.fill(getX(), getY(), getRight(), getY() + STRIP_HEIGHT, STRIP_COLOR);
-        if (session.searching) {
-            graphics.text(font, Component.translatable("cubeium.find.searching"), getX() + 4, getY() + 2, 0xFFA0A0A0);
-        } else if (session.found != null) {
-            MapSession.FoundTarget found = session.found;
-            graphics.text(font, Component.translatable("cubeium.find.result", found.label(), found.x(), found.z(), found.distance()),
-                    getX() + 4, getY() + 2, 0xFFFF7777);
-        }
         if (!hasHovered) {
             return;
         }
