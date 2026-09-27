@@ -91,5 +91,6 @@
   "cubeium.menu.add_waypoint": "Add waypoint here",
   "cubeium.menu.remove_waypoint": "Remove %s",
   "cubeium.structure.end_gateway": "End Gateway",
-  "cubeium.map.zoom_in_for": "Zoom in to see: %s"
+  "cubeium.map.zoom_in_for": "Zoom in to see: %s",
+  "cubeium.map.player_linked": "%s (from the %s)"
 }

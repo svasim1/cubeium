@@ -505,6 +505,17 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
         click(context, "cubeium.dimension.overworld");
         context.waitTicks(80);
         context.takeScreenshot("cubeium-nether");
+        // The player is in the Overworld; the Nether map shows them faded at X/8, Z/8, with a tooltip.
+        click(context, "cubeium.map.center_on_player");
+        context.waitTicks(20);
+        double[] mapCenter = context.computeOnClient(client -> {
+            var map = client.gui.screen().children().stream().filter(c -> c.getClass().getSimpleName().equals("MapWidget")).map(c -> (AbstractWidget) c).findFirst().orElseThrow();
+            double scale = client.getWindow().getGuiScale();
+            return new double[] {(map.getX() + map.getWidth() / 2.0) * scale, (map.getY() + map.getHeight() / 2.0) * scale};
+        });
+        context.getInput().setCursorPos(mapCenter[0], mapCenter[1]);
+        context.waitTicks(5);
+        context.takeScreenshot("cubeium-nether-linked-player");
         click(context, "cubeium.dimension.the_nether");
         click(context, "cubeium.dimension.the_end");
         context.waitTicks(40);

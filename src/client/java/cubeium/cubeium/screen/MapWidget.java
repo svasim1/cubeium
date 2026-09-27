@@ -118,7 +118,7 @@ final class MapWidget extends AbstractWidget {
         }
         List<StructureFinder.Found> markers = drawMarkers(graphics, config);
         List<Waypoint> waypoints = drawWaypoints(graphics);
-        drawPlayer(graphics);
+        boolean playerHovered = drawPlayer(graphics, mouseX, mouseY);
 
         hovering = isMouseOver(mouseX, mouseY) && (menu == null || !menu.contains(mouseX, mouseY));
         if (hovering) {
@@ -141,7 +141,9 @@ final class MapWidget extends AbstractWidget {
         } else if (hovering && !dragging) {
             StructureFinder.Found near = markerNear(markers, mouseX, mouseY);
             Waypoint waypoint = waypointNear(waypoints, mouseX, mouseY);
-            if (waypoint != null) {
+            if (playerHovered) {
+                graphics.setTooltipForNextFrame(font, playerTooltip(), mouseX, mouseY);
+            } else if (waypoint != null) {
                 graphics.setTooltipForNextFrame(font, Component.literal(waypoint.name)
                         .append(Component.literal("  " + waypoint.x + ", " + waypoint.z).withStyle(s -> s.withColor(0xFFFF55))), mouseX, mouseY);
             } else if (near != null) {
@@ -284,14 +286,38 @@ final class MapWidget extends AbstractWidget {
         return null;
     }
 
-    private void drawPlayer(GuiGraphicsExtractor graphics) {
+    /**
+     * Draws the player's face. In the linked dimension (Overworld / Nether) it is drawn faded at the
+     * portal-equivalent position. Returns whether the cursor is over it.
+     */
+    private boolean drawPlayer(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         LocalPlayer player = Minecraft.getInstance().player;
-        if (player == null || SeedMapScreen.dimensionOf(player) != session.dimension) {
-            return;
+        if (player == null) {
+            return false;
         }
-        int x = guiX(player.getX()), y = guiY(player.getZ());
-        graphics.fill(x - 5, y - 5, x + 5, y + 5, 0xFF000000);
+        Dimension actual = SeedMapScreen.dimensionOf(player);
+        double scale = actual.scaleTo(session.dimension);
+        if (Double.isNaN(scale)) {
+            return false;
+        }
+        int x = guiX(player.getX() * scale), y = guiY(player.getZ() * scale);
+        boolean linked = actual != session.dimension;
+        graphics.fill(x - 5, y - 5, x + 5, y + 5, linked ? 0xFFA0A0A0 : 0xFF000000);
         PlayerFaceExtractor.extractRenderState(graphics, player.getSkin(), x - 4, y - 4, 8);
+        if (linked) {
+            graphics.fill(x - 4, y - 4, x + 4, y + 4, 0x80000000);
+        }
+        return Math.abs(mouseX - x) <= 5 && Math.abs(mouseY - y) <= 5;
+    }
+
+    private Component playerTooltip() {
+        LocalPlayer player = Minecraft.getInstance().player;
+        Dimension actual = SeedMapScreen.dimensionOf(player);
+        double scale = actual.scaleTo(session.dimension);
+        int x = (int) Math.floor(player.getX() * scale), z = (int) Math.floor(player.getZ() * scale);
+        Component name = actual == session.dimension ? player.getName()
+                : Component.translatable("cubeium.map.player_linked", player.getName(), Component.translatable("cubeium.dimension." + actual.key()));
+        return name.copy().append(Component.literal("  " + x + ", " + z).withStyle(s -> s.withColor(0xFFFF55)));
     }
 
     /** Biome under the cursor: from a ready tile when possible, otherwise sampled directly. */
