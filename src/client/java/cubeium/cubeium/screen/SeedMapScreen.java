@@ -201,12 +201,9 @@ public final class SeedMapScreen extends Screen {
     }
 
     private void switchDimension(Dimension dimension) {
-        Dimension previous = session.dimension;
-        // Nether coordinates are 1/8 of the Overworld's, like portals.
-        if (previous == Dimension.OVERWORLD && dimension == Dimension.NETHER) {
-            session.view.center(session.view.centerX() / 8, session.view.centerZ() / 8);
-        } else if (previous == Dimension.NETHER && dimension == Dimension.OVERWORLD) {
-            session.view.center(session.view.centerX() * 8, session.view.centerZ() * 8);
+        double scale = session.dimension.scaleTo(dimension);
+        if (!Double.isNaN(scale)) {
+            session.view.center(session.view.centerX() * scale, session.view.centerZ() * scale);
         }
         session.show(session.seed(), dimension);
         rebuildPending = true; // structure and biome lists depend on the dimension
@@ -218,14 +215,12 @@ public final class SeedMapScreen extends Screen {
             session.view.center(0, 0);
             return;
         }
-        double scale = coordinateScale(dimensionOf(player), session.dimension);
-        session.view.center(player.getX() * scale, player.getZ() * scale);
-    }
-
-    private static double coordinateScale(Dimension from, Dimension to) {
-        if (from == Dimension.OVERWORLD && to == Dimension.NETHER) return 1 / 8.0;
-        if (from == Dimension.NETHER && to == Dimension.OVERWORLD) return 8;
-        return 1;
+        double scale = dimensionOf(player).scaleTo(session.dimension);
+        if (Double.isNaN(scale)) {
+            session.view.center(0.5, 0.5); // the End has no matching position; its main island is at the origin
+        } else {
+            session.view.center(player.getX() * scale, player.getZ() * scale);
+        }
     }
 
     private Tab mapTab(int panelWidth) {

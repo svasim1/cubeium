@@ -16,7 +16,9 @@ remembers its own seed.
   The arrow button next to the tabs hides the panel so the map can use the full height.
 - Hover for the biome and coordinates, or a marker for its structure. Right-click for a menu:
   copy coordinates, center here, add or remove a waypoint, and teleport (when enabled and permitted).
-- Switch between Overworld, Nether and End with the dimension button.
+- Switch between Overworld, Nether and End with the dimension button. The view keeps its place
+  (Nether coordinates are 1/8 of the Overworld's), and on the linked map your position is shown
+  faded where a portal would take you. The End has no such link.
 - **Map** tab: region grid, coordinate axes, slime chunks, go to coordinates.
 - **Structures** tab: every structure cubiomes supports for the dimension, shown with vanilla item
   icons, including End Cities with ships and the outer End gateways. Very common ones (ruined

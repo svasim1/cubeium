@@ -19,6 +19,14 @@ public enum Dimension {
         return key;
     }
 
+    /** Converts coordinates from this dimension to {@code to}, as portals do; NaN when they don't correspond (the End). */
+    public double scaleTo(Dimension to) {
+        if (this == to) return 1;
+        if (this == OVERWORLD && to == NETHER) return 1 / 8.0;
+        if (this == NETHER && to == OVERWORLD) return 8;
+        return Double.NaN;
+    }
+
     public int cubiomesId() {
         return switch (this) {
             case OVERWORLD -> Cubiomes.DIM_OVERWORLD();
