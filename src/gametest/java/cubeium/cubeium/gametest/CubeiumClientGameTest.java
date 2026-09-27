@@ -472,9 +472,6 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
 
         click(context, "cubeium.tab.map");
         context.waitTicks(5);
-        click(context, "cubeium.find.go");
-        context.waitTicks(100);
-        context.takeScreenshot("cubeium-find-nearest");
 
         click(context, "cubeium.map.slime_chunks");
         context.getInput().setCursorPos(center[0], center[1]);

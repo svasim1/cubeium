@@ -17,8 +17,7 @@ remembers its own seed.
 - Hover for the biome and coordinates, or a marker for its structure. Right-click for a menu:
   copy coordinates, center here, add or remove a waypoint, and teleport (when enabled and permitted).
 - Switch between Overworld, Nether and End with the dimension button.
-- **Map** tab: region grid, coordinate axes, slime chunks, go to coordinates, and **Find nearest**
-  for any structure or biome of the dimension.
+- **Map** tab: region grid, coordinate axes, slime chunks, go to coordinates.
 - **Structures** tab: every structure cubiomes supports for the dimension, shown with vanilla item
   icons, including End Cities with ships as their own entry. Very common ones (ruined portals,
   shipwrecks, ocean ruins, trial chambers, mineshafts, buried treasure) start switched off.

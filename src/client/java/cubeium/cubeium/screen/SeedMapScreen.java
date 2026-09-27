@@ -3,15 +3,12 @@ package cubeium.cubeium.screen;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.OptionalLong;
 
 import com.mojang.blaze3d.platform.InputConstants;
 
 import cubeium.cubeium.config.CubeiumConfig;
 import cubeium.cubeium.config.Waypoint;
-import cubeium.cubeium.map.MapStructures;
-import cubeium.cubeium.map.NearestSearch;
 import cubeium.cubeium.map.MapView;
 import cubeium.cubeium.world.Biomes;
 import cubeium.cubeium.world.Dimension;
@@ -60,7 +57,6 @@ public final class SeedMapScreen extends Screen {
     private static final Identifier COLLAPSE_SPRITE = Identifier.fromNamespaceAndPath("cubeium", "icon/collapse_panel");
     private static final Identifier EXPAND_SPRITE = Identifier.fromNamespaceAndPath("cubeium", "icon/expand_panel");
     private static int selectedTab;
-    private static NearestSearch.Target findTarget = new NearestSearch.StructureTarget(StructureKind.VILLAGE);
 
     private final MapSession session = MapSession.get();
     private final CubeiumConfig config = CubeiumConfig.get();
@@ -271,63 +267,7 @@ public final class SeedMapScreen extends Screen {
         goTo.addChild(Button.builder(Component.translatable("cubeium.map.origin"), b -> session.view.center(0.5, 0.5)).width(60).build());
         grid.addChild(goTo, 1, 0, 1, 2);
 
-        List<NearestSearch.Target> targets = findTargets();
-        if (!targets.contains(findTarget)) {
-            findTarget = targets.getFirst();
-        }
-        LinearLayout find = LinearLayout.horizontal().spacing(4);
-        find.addChild(CycleButton.builder(SeedMapScreen::targetName, findTarget).withValues(targets)
-                .create(0, 0, 150, 20, Component.translatable("cubeium.find"), (b, v) -> findTarget = v));
-        find.addChild(Button.builder(Component.translatable("cubeium.find.go"), b -> findNearest(findTarget))
-                .tooltip(Tooltip.create(Component.translatable("cubeium.find.tooltip"))).width(80).build());
-        grid.addChild(find, 1, 2);
         return tab;
-    }
-
-    /** Everything "find nearest" can look for in the current dimension: structures, then biomes. */
-    private List<NearestSearch.Target> findTargets() {
-        List<NearestSearch.Target> targets = new ArrayList<>();
-        StructureKind.in(session.dimension).forEach(kind -> targets.add(new NearestSearch.StructureTarget(kind)));
-        Biomes.mapBiomes(MapSession.MC_VERSION, session.dimension).stream()
-                .sorted((a, b) -> biomeLabel(a).getString().compareToIgnoreCase(biomeLabel(b).getString()))
-                .forEach(id -> targets.add(new NearestSearch.BiomeTarget(id)));
-        return targets;
-    }
-
-    private static Component targetName(NearestSearch.Target target) {
-        return switch (target) {
-            case NearestSearch.StructureTarget s -> Component.translatable("cubeium.structure." + s.kind().key());
-            case NearestSearch.BiomeTarget b -> biomeLabel(b.biomeId());
-        };
-    }
-
-    /** Searches from the player when they are in the shown dimension, otherwise from the map center. */
-    private void findNearest(NearestSearch.Target target) {
-        MapStructures structures = session.structures();
-        if (structures == null || session.searching) {
-            return;
-        }
-        LocalPlayer player = minecraft.player;
-        boolean fromPlayer = player != null && dimensionOf(player) == session.dimension;
-        int x = (int) Math.floor(fromPlayer ? player.getX() : session.view.centerX());
-        int z = (int) Math.floor(fromPlayer ? player.getZ() : session.view.centerZ());
-        Long seed = session.seed();
-        Dimension dimension = session.dimension;
-        Component label = targetName(target);
-        session.searching = true;
-        session.found = null;
-        NearestSearch.find(structures.finder(), target, x, z).thenAccept(hit -> minecraft.execute(() -> {
-            if (!Objects.equals(seed, session.seed()) || dimension != session.dimension) {
-                return; // the map moved on to another seed or dimension meanwhile
-            }
-            session.searching = false;
-            session.found = hit.map(h -> new MapSession.FoundTarget(label, h.x(), h.z(), (int) Math.round(h.distance()))).orElse(null);
-            if (session.found == null) {
-                minecraft.gui.hud.getChat().addClientSystemMessage(Component.translatable("cubeium.find.none", label));
-            } else {
-                session.view.center(session.found.x() + 0.5, session.found.z() + 0.5);
-            }
-        }));
     }
 
     private Tab waypointsTab(int panelWidth, int panelHeight) {
