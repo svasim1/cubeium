@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/banner.png" alt="Cubeium" width="600"></p>
+
 # Cubeium
 
 An in-game seed map for Minecraft (Fabric): explore a seed's biomes and structures without leaving
