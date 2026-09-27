@@ -1,5 +1,7 @@
 package cubeium.cubeium.screen;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -37,6 +39,7 @@ final class SeedMapSettingsScreen extends Screen {
         rows.addChild(toggle("teleport", () -> config.teleportInMenu, v -> config.teleportInMenu = v));
         rows.addChild(toggle("keep_position", () -> config.keepMapPosition, v -> config.keepMapPosition = v));
         rows.addChild(toggle("render_metrics", () -> config.renderMetrics, v -> config.renderMetrics = v));
+        rows.addChild(uiScaleButton());
         layout.addToContents(grid);
         layout.addToFooter(Button.builder(CommonComponents.GUI_DONE, b -> onClose()).width(200).build());
         layout.visitWidgets(this::addRenderableWidget);
@@ -51,6 +54,41 @@ final class SeedMapSettingsScreen extends Screen {
                     setter.accept(value);
                     config.save();
                 });
+    }
+
+    private CycleButton<Integer> uiScaleButton() {
+        List<Integer> values = new ArrayList<>();
+        values.add(ScreenScale.AUTO);
+        for (int scale = 1; scale <= ScreenScale.maxScale(minecraft); scale++) {
+            values.add(scale);
+        }
+        int current = values.contains(config.mapUiScale) ? config.mapUiScale : ScreenScale.AUTO;
+        return CycleButton.<Integer>builder(v -> v == ScreenScale.AUTO ? Component.translatable("cubeium.settings.ui_scale.auto") : Component.literal(Integer.toString(v)), current)
+                .withValues(values)
+                .withTooltip(v -> Tooltip.create(Component.translatable("cubeium.settings.ui_scale.tooltip")))
+                .create(0, 0, 150, 20, Component.translatable("cubeium.settings.ui_scale"), (button, value) -> {
+                    config.mapUiScale = value;
+                    config.save();
+                    if (ScreenScale.apply(minecraft)) {
+                        resize(minecraft.getWindow().getGuiScaledWidth(), minecraft.getWindow().getGuiScaledHeight());
+                    }
+                });
+    }
+
+    @Override
+    public void added() {
+        ScreenScale.apply(minecraft);
+    }
+
+    @Override
+    public void resize(int width, int height) {
+        ScreenScale.apply(minecraft);
+        super.resize(minecraft.getWindow().getGuiScaledWidth(), minecraft.getWindow().getGuiScaledHeight());
+    }
+
+    @Override
+    public void removed() {
+        ScreenScale.restore(minecraft);
     }
 
     @Override

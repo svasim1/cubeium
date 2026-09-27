@@ -12,6 +12,7 @@ import cubeium.cubeium.world.Dimension;
 import cubeium.cubeium.world.StructureFinder;
 import cubeium.cubeium.world.WorldGenerator;
 import dev.xpple.cubiomes.Cubiomes;
+import net.minecraft.network.chat.Component;
 import net.minecraft.util.ARGB;
 import org.jspecify.annotations.Nullable;
 
@@ -32,6 +33,12 @@ final class MapSession {
     private @Nullable Long seed;
     private @Nullable MapTiles tiles;
     private @Nullable MapStructures structures;
+    /** Result of the last "find nearest", shown on the map until the world or dimension changes. */
+    @Nullable FoundTarget found;
+    boolean searching;
+
+    record FoundTarget(Component label, int x, int z, int distance) {
+    }
 
     static MapSession get() {
         if (instance == null) {
@@ -99,5 +106,7 @@ final class MapSession {
         tiles = null;
         structures = null;
         seed = null;
+        found = null;
+        searching = false;
     }
 }

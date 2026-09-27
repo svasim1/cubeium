@@ -3,11 +3,15 @@ package cubeium.cubeium.screen;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.OptionalLong;
 
 import com.mojang.blaze3d.platform.InputConstants;
 
 import cubeium.cubeium.config.CubeiumConfig;
+import cubeium.cubeium.config.Waypoint;
+import cubeium.cubeium.map.MapStructures;
+import cubeium.cubeium.map.NearestSearch;
 import cubeium.cubeium.map.MapView;
 import cubeium.cubeium.world.Biomes;
 import cubeium.cubeium.world.Dimension;
@@ -18,6 +22,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Checkbox;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.ItemDisplayWidget;
 import net.minecraft.client.gui.components.ScrollableLayout;
 import net.minecraft.client.gui.components.SpriteIconButton;
 import net.minecraft.client.gui.components.StringWidget;
@@ -52,11 +57,14 @@ public final class SeedMapScreen extends Screen {
     private static final long SEED_DEBOUNCE_MS = 300;
     private static final Identifier CENTER_SPRITE = Identifier.fromNamespaceAndPath("cubeium", "icon/center_on_player");
     private static final Identifier SETTINGS_SPRITE = Identifier.fromNamespaceAndPath("cubeium", "icon/settings");
+    private static final Identifier COLLAPSE_SPRITE = Identifier.fromNamespaceAndPath("cubeium", "icon/collapse_panel");
+    private static final Identifier EXPAND_SPRITE = Identifier.fromNamespaceAndPath("cubeium", "icon/expand_panel");
     private static int selectedTab;
+    private static NearestSearch.Target findTarget = new NearestSearch.StructureTarget(StructureKind.VILLAGE);
 
     private final MapSession session = MapSession.get();
     private final CubeiumConfig config = CubeiumConfig.get();
-    private final TabManager tabManager = new TabManager(this::addRenderableWidget, this::removeWidget);
+    private TabManager tabManager = new TabManager(this::addRenderableWidget, this::removeWidget);
     private final List<SwatchCheckbox> biomeBoxes = new ArrayList<>();
     private String worldKey = "";
     private @Nullable EditBox seedBox;
@@ -68,6 +76,12 @@ public final class SeedMapScreen extends Screen {
     private int panelTop;
     /** init() also runs on resize and rebuildWidgets(); world setup happens only once per opening. */
     private boolean opened;
+    /** Widgets must not be rebuilt while a click is being dispatched, so rebuilds wait for tick(). */
+    private boolean rebuildPending;
+    private String biomeQuery = "";
+    private @Nullable EditBox biomeSearch;
+    /** Typing in the biome search rebuilds the list; the new search box takes over the focus. */
+    private boolean refocusSearch;
 
     public SeedMapScreen() {
         super(Component.translatable("cubeium.map.title"));
@@ -81,7 +95,8 @@ public final class SeedMapScreen extends Screen {
         }
 
         int mapWidth = width - 2 * PAD;
-        int panelHeight = Math.clamp((height - MAP_Y) * 3 / 10, 64, 120);
+        boolean collapsed = config.panelCollapsed;
+        int panelHeight = collapsed ? 0 : Math.clamp((height - MAP_Y) * 3 / 10, 64, 120);
         int tabBarY = height - BOTTOM_MARGIN - panelHeight - PanelTabBar.HEIGHT;
         panelTop = tabBarY + PanelTabBar.HEIGHT;
         int mapHeight = Math.max(40, tabBarY - 6 - MAP_Y);
@@ -122,18 +137,37 @@ public final class SeedMapScreen extends Screen {
         Component showAllText = Component.translatable("cubeium.biomes.show_all");
         showAll = addWidget(Button.builder(showAllText, b -> setHighlight(false))
                 .bounds(0, MAP_Y + mapHeight - 38, font.width(showAllText) + 12, 20).build());
-        map = addRenderableWidget(new MapWidget(session, font, this::onClose));
+        map = addRenderableWidget(new MapWidget(session, font, this::onClose, () -> rebuildPending = true));
         map.setBounds(PAD, MAP_Y, mapWidth, mapHeight);
         addRenderableOnly(zoomIn);
         addRenderableOnly(zoomOut);
         layoutBanner();
 
-        // Tabs.
-        List<Tab> tabs = List.of(mapTab(mapWidth), structuresTab(mapWidth, panelHeight), biomesTab(mapWidth, panelHeight));
+        // Tabs. While the panel is collapsed no tab is open; picking one expands the panel again.
+        List<Tab> tabs = List.of(mapTab(mapWidth), structuresTab(mapWidth, panelHeight), biomesTab(mapWidth, panelHeight),
+                waypointsTab(mapWidth, panelHeight));
+        tabManager = new TabManager(this::addRenderableWidget, this::removeWidget, tab -> {
+            if (config.panelCollapsed) {
+                selectedTab = tabs.indexOf(tab);
+                setPanelCollapsed(false);
+            }
+        }, tab -> { });
         tabBar = addRenderableWidget(PanelTabBar.create(tabManager, PAD, tabBarY, mapWidth, tabs));
-        tabManager.setTabArea(new ScreenRectangle(PAD, panelTop + 4, mapWidth, panelHeight - 8));
-        tabBar.selectTab(Math.min(selectedTab, tabs.size() - 1), false);
-        setInitialFocus(map);
+        tabManager.setTabArea(new ScreenRectangle(PAD, panelTop + 4, mapWidth, Math.max(0, panelHeight - 8)));
+        if (!collapsed) {
+            tabBar.selectTab(Math.min(selectedTab, tabs.size() - 1), false);
+        }
+        Identifier toggleSprite = collapsed ? EXPAND_SPRITE : COLLAPSE_SPRITE;
+        addRenderableWidget(SpriteIconButton.builder(Component.translatable(collapsed ? "cubeium.map.expand_panel" : "cubeium.map.collapse_panel"),
+                        b -> setPanelCollapsed(!config.panelCollapsed), true)
+                .size(20, 20).sprite(toggleSprite, 16, 16).withTootip().build()).setPosition(PAD + mapWidth - 20, tabBarY + 2);
+        if (refocusSearch && biomeSearch != null) {
+            refocusSearch = false;
+            setFocused(biomeSearch);
+            biomeSearch.moveCursorToEnd(false);
+        } else {
+            setInitialFocus(map);
+        }
     }
 
     /** Called on (re)open: resets the view for a new world, fills in the seed, picks the dimension. */
@@ -204,6 +238,14 @@ public final class SeedMapScreen extends Screen {
                     config.coordinateAxes = v;
                     config.save();
                 }), 0, 1);
+        if (session.dimension == Dimension.OVERWORLD) {
+            grid.addChild(CycleButton.onOffBuilder(config.slimeChunks)
+                    .withTooltip(v -> Tooltip.create(Component.translatable("cubeium.map.slime_chunks.tooltip")))
+                    .create(0, 0, 150, 20, Component.translatable("cubeium.map.slime_chunks"), (b, v) -> {
+                        config.slimeChunks = v;
+                        config.save();
+                    }), 0, 2);
+        }
 
         LinearLayout goTo = LinearLayout.horizontal().spacing(4);
         goTo.defaultCellSetting().alignVerticallyMiddle();
@@ -222,6 +264,95 @@ public final class SeedMapScreen extends Screen {
         }).width(40).build());
         goTo.addChild(Button.builder(Component.translatable("cubeium.map.origin"), b -> session.view.center(0.5, 0.5)).width(60).build());
         grid.addChild(goTo, 1, 0, 1, 2);
+
+        List<NearestSearch.Target> targets = findTargets();
+        if (!targets.contains(findTarget)) {
+            findTarget = targets.getFirst();
+        }
+        LinearLayout find = LinearLayout.horizontal().spacing(4);
+        find.addChild(CycleButton.builder(SeedMapScreen::targetName, findTarget).withValues(targets)
+                .create(0, 0, 150, 20, Component.translatable("cubeium.find"), (b, v) -> findTarget = v));
+        find.addChild(Button.builder(Component.translatable("cubeium.find.go"), b -> findNearest(findTarget))
+                .tooltip(Tooltip.create(Component.translatable("cubeium.find.tooltip"))).width(80).build());
+        grid.addChild(find, 1, 2);
+        return tab;
+    }
+
+    /** Everything "find nearest" can look for in the current dimension: structures, then biomes. */
+    private List<NearestSearch.Target> findTargets() {
+        List<NearestSearch.Target> targets = new ArrayList<>();
+        StructureKind.in(session.dimension).forEach(kind -> targets.add(new NearestSearch.StructureTarget(kind)));
+        Biomes.mapBiomes(MapSession.MC_VERSION, session.dimension).stream()
+                .sorted((a, b) -> biomeLabel(a).getString().compareToIgnoreCase(biomeLabel(b).getString()))
+                .forEach(id -> targets.add(new NearestSearch.BiomeTarget(id)));
+        return targets;
+    }
+
+    private static Component targetName(NearestSearch.Target target) {
+        return switch (target) {
+            case NearestSearch.StructureTarget s -> Component.translatable("cubeium.structure." + s.kind().key());
+            case NearestSearch.BiomeTarget b -> biomeLabel(b.biomeId());
+        };
+    }
+
+    /** Searches from the player when they are in the shown dimension, otherwise from the map center. */
+    private void findNearest(NearestSearch.Target target) {
+        MapStructures structures = session.structures();
+        if (structures == null || session.searching) {
+            return;
+        }
+        LocalPlayer player = minecraft.player;
+        boolean fromPlayer = player != null && dimensionOf(player) == session.dimension;
+        int x = (int) Math.floor(fromPlayer ? player.getX() : session.view.centerX());
+        int z = (int) Math.floor(fromPlayer ? player.getZ() : session.view.centerZ());
+        Long seed = session.seed();
+        Dimension dimension = session.dimension;
+        Component label = targetName(target);
+        session.searching = true;
+        session.found = null;
+        NearestSearch.find(structures.finder(), target, x, z).thenAccept(hit -> minecraft.execute(() -> {
+            if (!Objects.equals(seed, session.seed()) || dimension != session.dimension) {
+                return; // the map moved on to another seed or dimension meanwhile
+            }
+            session.searching = false;
+            session.found = hit.map(h -> new MapSession.FoundTarget(label, h.x(), h.z(), (int) Math.round(h.distance()))).orElse(null);
+            if (session.found == null) {
+                minecraft.gui.hud.getChat().addClientSystemMessage(Component.translatable("cubeium.find.none", label));
+            } else {
+                session.view.center(session.found.x() + 0.5, session.found.z() + 0.5);
+            }
+        }));
+    }
+
+    private Tab waypointsTab(int panelWidth, int panelHeight) {
+        GridLayoutTab tab = new GridLayoutTab(Component.translatable("cubeium.tab.waypoints"));
+        GridLayout grid = (GridLayout) tab.getLayout();
+        List<Waypoint> all = config.waypoints(worldKey);
+        List<Waypoint> here = all.stream().filter(w -> session.dimension.key().equals(w.dimension)).toList();
+        if (here.isEmpty()) {
+            grid.addChild(new StringWidget(Component.translatable("cubeium.waypoints.empty").copy().withStyle(s -> s.withColor(0xA0A0A0)), font), 0, 0);
+            return tab;
+        }
+        GridLayout list = new GridLayout().rowSpacing(3).columnSpacing(6);
+        int row = 0;
+        for (Waypoint waypoint : here) {
+            list.addChild(new ItemDisplayWidget(minecraft, 0, 2, 16, 20, Component.literal(waypoint.name), MapWidget.waypointIcon(waypoint), false, false), row, 0);
+            EditBox name = list.addChild(new EditBox(font, 140, 20, Component.translatable("cubeium.waypoints.name")), row, 1);
+            name.setMaxLength(32);
+            name.setValue(waypoint.name);
+            name.setResponder(text -> waypoint.name = text);
+            list.addChild(new StringWidget(90, 20, Component.literal(waypoint.x + ", " + waypoint.z), font), row, 2);
+            list.addChild(Button.builder(Component.translatable("cubeium.map.go"), b -> session.view.center(waypoint.x + 0.5, waypoint.z + 0.5))
+                    .width(36).build(), row, 3);
+            list.addChild(Button.builder(Component.translatable("cubeium.waypoints.delete"), b -> {
+                all.remove(waypoint);
+                config.save();
+                rebuildPending = true;
+            }).width(50).build(), row, 4);
+            row++;
+        }
+        ScrollableLayout scroll = new ScrollableLayout(minecraft, list, panelHeight - 12);
+        grid.addChild(scroll, 0, 0);
         return tab;
     }
 
@@ -252,12 +383,27 @@ public final class SeedMapScreen extends Screen {
         GridLayout grid = (GridLayout) tab.getLayout();
         grid.rowSpacing(4);
 
+        // Only the biomes matching the search are listed; All/None act on those.
+        String query = biomeQuery.trim().toLowerCase(Locale.ROOT);
+        List<Integer> ids = Biomes.mapBiomes(MapSession.MC_VERSION, session.dimension).stream()
+                .filter(id -> query.isEmpty() || biomeLabel(id).getString().toLowerCase(Locale.ROOT).contains(query))
+                .toList();
+
         LinearLayout actions = LinearLayout.horizontal().spacing(6);
-        actions.addChild(CycleButton.onOffBuilder(config.highlightBiomes).create(0, 0, 150, 20,
+        actions.addChild(CycleButton.onOffBuilder(config.highlightBiomes).create(0, 0, 130, 20,
                 Component.translatable("cubeium.biomes.highlight"), (b, v) -> setHighlight(v)));
-        List<Integer> ids = Biomes.mapBiomes(MapSession.MC_VERSION, session.dimension);
-        actions.addChild(Button.builder(Component.translatable("cubeium.biomes.all"), b -> selectBiomes(ids, true)).width(50).build());
-        actions.addChild(Button.builder(Component.translatable("cubeium.biomes.none"), b -> selectBiomes(ids, false)).width(50).build());
+        actions.addChild(Button.builder(Component.translatable("cubeium.biomes.all"), b -> selectBiomes(ids, true)).width(40).build());
+        actions.addChild(Button.builder(Component.translatable("cubeium.biomes.none"), b -> selectBiomes(ids, false)).width(40).build());
+        biomeSearch = actions.addChild(new EditBox(font, 0, 0, Math.clamp(panelWidth - 260, 60, 160), 20, biomeSearch, Component.translatable("cubeium.biomes.search")));
+        biomeSearch.setHint(Component.translatable("cubeium.biomes.search"));
+        biomeSearch.setValue(biomeQuery);
+        biomeSearch.setResponder(text -> {
+            if (!text.equals(biomeQuery)) {
+                biomeQuery = text;
+                refocusSearch = true;
+                rebuildPending = true;
+            }
+        });
         grid.addChild(actions, 0, 0);
 
         int columns = Math.max(1, Math.min(4, (panelWidth - 20) / 140));
@@ -265,22 +411,35 @@ public final class SeedMapScreen extends Screen {
         GridLayout list = new GridLayout().rowSpacing(3);
         GridLayout.RowHelper rows = list.createRowHelper(columns);
         biomeBoxes.clear();
-        ids.stream()
-                .sorted((a, b) -> biomeLabel(a).getString().compareToIgnoreCase(biomeLabel(b).getString()))
-                .forEach(id -> {
-                    SwatchCheckbox box = new SwatchCheckbox(columnWidth - 4, biomeLabel(id), Biomes.color(id),
-                            config.highlightedBiomes.contains(id), selected -> {
-                                if (selected) {
-                                    config.highlightedBiomes.add(id);
-                                } else {
-                                    config.highlightedBiomes.remove(id);
-                                }
-                                config.save();
-                                session.refreshPalette();
-                            });
-                    biomeBoxes.add(box);
-                    rows.addChild(box);
-                });
+        for (BiomeCategory category : BiomeCategory.values()) {
+            List<Integer> inCategory = ids.stream()
+                    .filter(id -> BiomeCategory.of(Biomes.name(MapSession.MC_VERSION, id)) == category)
+                    .sorted((a, b) -> biomeLabel(a).getString().compareToIgnoreCase(biomeLabel(b).getString()))
+                    .toList();
+            if (inCategory.isEmpty()) {
+                continue;
+            }
+            rows.addChild(new StringWidget(panelWidth - 24, 12, category.title().copy().withStyle(s -> s.withColor(0xA0A0A0)), font), columns);
+            for (int id : inCategory) {
+                SwatchCheckbox box = new SwatchCheckbox(columnWidth - 4, biomeLabel(id), Biomes.color(id),
+                        config.highlightedBiomes.contains(id), selected -> {
+                            if (selected) {
+                                config.highlightedBiomes.add(id);
+                            } else {
+                                config.highlightedBiomes.remove(id);
+                            }
+                            config.save();
+                            session.refreshPalette();
+                        });
+                biomeBoxes.add(box);
+                rows.addChild(box);
+            }
+            // Start the next category on a new row.
+            int used = inCategory.size() % columns;
+            if (used != 0) {
+                rows.addChild(new StringWidget(0, 0, Component.empty(), font), columns - used);
+            }
+        }
         ScrollableLayout scroll = new ScrollableLayout(minecraft, list, panelHeight - 12 - 24);
         scroll.setMinWidth(panelWidth - 20);
         grid.addChild(scroll, 1, 0);
@@ -308,7 +467,7 @@ public final class SeedMapScreen extends Screen {
         config.save();
         session.refreshPalette();
         if (!enabled) {
-            rebuildWidgets(); // the Biomes tab's toggle shows the new state
+            rebuildPending = true; // the Biomes tab's toggle shows the new state
         }
         layoutBanner();
     }
@@ -324,8 +483,30 @@ public final class SeedMapScreen extends Screen {
         }
     }
 
+    private void setPanelCollapsed(boolean collapsed) {
+        config.panelCollapsed = collapsed;
+        config.save();
+        rebuildPending = true;
+    }
+
+    @Override
+    public void added() {
+        ScreenScale.apply(minecraft);
+    }
+
+    @Override
+    public void resize(int width, int height) {
+        // A window resize resets the GUI scale to the player's; switch back to ours.
+        ScreenScale.apply(minecraft);
+        super.resize(minecraft.getWindow().getGuiScaledWidth(), minecraft.getWindow().getGuiScaledHeight());
+    }
+
     @Override
     public void tick() {
+        if (rebuildPending) {
+            rebuildPending = false;
+            rebuildWidgets();
+        }
         if (pendingSeedText != null && System.currentTimeMillis() - pendingSeedAt >= SEED_DEBOUNCE_MS) {
             String text = pendingSeedText;
             pendingSeedText = null;
@@ -338,7 +519,7 @@ public final class SeedMapScreen extends Screen {
     @Override
     public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a) {
         Backgrounds.screen(graphics, width, height);
-        if (map != null) {
+        if (map != null && !config.panelCollapsed) {
             Backgrounds.panelFill(graphics, map.getX(), panelTop, map.getRight(), height - BOTTOM_MARGIN);
             graphics.blit(RenderPipelines.GUI_TEXTURED, Screen.FOOTER_SEPARATOR, map.getX(), height - BOTTOM_MARGIN - 2, 0, 0, map.getWidth(), 2, 32, 2);
         }
@@ -389,6 +570,7 @@ public final class SeedMapScreen extends Screen {
             applySeed(pendingSeedText);
         }
         config.save();
+        ScreenScale.restore(minecraft);
     }
 
     // ---- helpers shared with the map widget ----
