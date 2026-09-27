@@ -1,15 +1,5 @@
 package cubeium.cubeium.seedmap;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-
 import cubeium.cubeium.Cubeium;
 import cubeium.cubeium.gui.MouseSubpixelSmoother;
 import cubeium.cubeium.rendering.MapTileRenderer;
@@ -17,7 +7,6 @@ import cubeium.cubeium.ui.SeedInputWidget;
 import cubeium.cubeium.util.RenderMetrics;
 import cubeium.cubeium.world.MapCache;
 import cubeium.cubeium.world.generation.BiomeGenerator;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
@@ -33,8 +22,6 @@ import net.minecraft.util.Identifier;
  */
 public class CubeiumSeedMapScreen extends Screen {
     private static SeedMapSession sharedSession;
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final String SETTINGS_FILE_NAME = "cubeium-client-settings.json";
     private static final Identifier NAVIGATION_ICON_TEXTURE = Identifier.of("cubeium", "textures/gui/navigation_icon.png");
     private static final Identifier SETTINGS_ICON_TEXTURE = Identifier.of("cubeium", "textures/gui/settings_icon.png");
     
@@ -251,8 +238,8 @@ public class CubeiumSeedMapScreen extends Screen {
                 }
             }
 
-            int playerWorldX = (int) client.player.getX();
-            int playerWorldZ = (int) client.player.getZ();
+            int playerWorldX = client.player.getBlockX();
+            int playerWorldZ = client.player.getBlockZ();
 
             if (playerMarker == null) {
                 playerMarker = new CubeiumMapMarker(CubeiumMapMarker.MarkerType.PLAYER, playerWorldX, playerWorldZ, "Player");
@@ -269,8 +256,8 @@ public class CubeiumSeedMapScreen extends Screen {
         try {
             MinecraftClient mc = MinecraftClient.getInstance();
             if (mc != null && mc.player != null) {
-                mapCenterX = (int) mc.player.getX();
-                mapCenterZ = (int) mc.player.getZ();
+                mapCenterX = mc.player.getBlockX();
+                mapCenterZ = mc.player.getBlockZ();
             }
         } catch (Exception ignored) {
         }
@@ -331,11 +318,8 @@ public class CubeiumSeedMapScreen extends Screen {
             metrics.setChunkCacheSize(mapCache != null ? mapCache.getChunkCount(currentSeed) : 0);
             metrics.endFrame();
 
-            if (metrics.shouldLogNow(5000)) {
-                String line = metrics.snapshot().toLogLine();
-                Cubeium.LOGGER.info("[CubeiumMetrics] {}", line);
-                // Print to stdout as well so metrics are visible in debug console even if logger filters INFO.
-                System.out.println("[CubeiumMetrics] " + line);
+            if (session.showPerformanceInfo && metrics.shouldLogNow(5000)) {
+                Cubeium.LOGGER.info("[CubeiumMetrics] {}", metrics.snapshot().toLogLine());
             }
         }
 
@@ -834,14 +818,13 @@ public class CubeiumSeedMapScreen extends Screen {
             biomeId = renderedBiomeId;
         } else {
             // Fallback when this pixel is still on placeholder/no tile data.
-            session.biomeGenerator.setSeed(currentSeed, 0);
-            biomeId = session.biomeGenerator.getBiomeAt(worldX, worldZ);
+            biomeId = session.biomeGenerator.getBiomeAt(currentSeed, worldX, worldZ);
         }
 
         hoverSample.worldX = worldX;
         hoverSample.worldZ = worldZ;
         hoverSample.biomeName = session.biomeGenerator.getBiomeName(biomeId);
-        hoverSample.biomeColor = MapTileRenderer.getBiomeColor(biomeId);
+        hoverSample.biomeColor = BiomeGenerator.getBiomeColor(biomeId);
         hoverSample.valid = true;
     }
     
@@ -895,11 +878,11 @@ public class CubeiumSeedMapScreen extends Screen {
     
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        // Handle seed input first
-        if (seedInput != null && seedInput.keyPressed(keyCode, scanCode, modifiers)) {
+        // A focused text field gets keys first, so arrows move its cursor instead of panning.
+        if (getFocused() instanceof TextFieldWidget && super.keyPressed(keyCode, scanCode, modifiers)) {
             return true;
         }
-        
+
         // Fixed controls to use SeedMapScreen approach
         int moveDistance = 32 * zoomLevel; // Pan by 32 blocks * zoom level
         
@@ -915,9 +898,6 @@ public class CubeiumSeedMapScreen extends Screen {
                 return true;
             case 265: // Up arrow
                 mapCenterZ -= moveDistance;
-                return true;
-            case 256: // Escape
-                close();
                 return true;
         }
         
@@ -997,9 +977,6 @@ public class CubeiumSeedMapScreen extends Screen {
     
     @Override
     public void close() {
-        if (markerRenderer != null) {
-            markerRenderer.shutdown();
-        }
         saveSessionState();
         super.close();
     }
@@ -1007,7 +984,7 @@ public class CubeiumSeedMapScreen extends Screen {
     private static SeedMapSession getOrCreateSession() {
         if (sharedSession == null) {
             sharedSession = new SeedMapSession();
-            loadPersistentSettings(sharedSession);
+            CubeiumSeedMapSettingsStore.loadPersistentSettings(sharedSession);
         }
         return sharedSession;
     }
@@ -1023,81 +1000,7 @@ public class CubeiumSeedMapScreen extends Screen {
         if (seedInput != null) {
             session.seedInputText = seedInput.getText();
         }
-        savePersistentSettings(session);
-    }
-
-    public static void savePersistentSettings(SeedMapSession session) {
-        try {
-            JsonObject root = new JsonObject();
-            root.addProperty("showPerformanceInfo", session.showPerformanceInfo);
-            root.addProperty("showFloatingTooltip", session.showFloatingTooltip);
-            root.addProperty("enableTeleportInContextMenu", session.enableTeleportInContextMenu);
-            root.addProperty("showMarkerLabels", session.showMarkerLabels);
-            root.addProperty("preservePanOnOpen", session.preservePanOnOpen);
-            root.addProperty("biomeFilteringEnabled", session.biomeFilteringEnabled);
-
-            JsonArray selectedBiomeIds = new JsonArray();
-            for (Integer biomeId : session.selectedBiomeIds) {
-                selectedBiomeIds.add(biomeId);
-            }
-            root.add("selectedBiomeIds", selectedBiomeIds);
-
-            Path settingsPath = getSettingsPath();
-            Files.createDirectories(settingsPath.getParent());
-            Files.writeString(settingsPath, GSON.toJson(root), StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            Cubeium.LOGGER.warn("[CubeiumSeedMapScreen] Failed to save settings", e);
-        }
-    }
-
-    public static void loadPersistentSettings(SeedMapSession session) {
-        try {
-            Path settingsPath = getSettingsPath();
-            if (!Files.exists(settingsPath)) {
-                return;
-            }
-
-            String raw = Files.readString(settingsPath, StandardCharsets.UTF_8);
-            JsonObject root = GSON.fromJson(raw, JsonObject.class);
-            if (root == null) {
-                return;
-            }
-
-            if (root.has("showPerformanceInfo")) {
-                session.showPerformanceInfo = root.get("showPerformanceInfo").getAsBoolean();
-            }
-            if (root.has("showFloatingTooltip")) {
-                session.showFloatingTooltip = root.get("showFloatingTooltip").getAsBoolean();
-            }
-            if (root.has("enableTeleportInContextMenu")) {
-                session.enableTeleportInContextMenu = root.get("enableTeleportInContextMenu").getAsBoolean();
-            }
-            if (root.has("showMarkerLabels")) {
-                session.showMarkerLabels = root.get("showMarkerLabels").getAsBoolean();
-            }
-            if (root.has("preservePanOnOpen")) {
-                session.preservePanOnOpen = root.get("preservePanOnOpen").getAsBoolean();
-            }
-            if (root.has("biomeFilteringEnabled")) {
-                session.biomeFilteringEnabled = root.get("biomeFilteringEnabled").getAsBoolean();
-            }
-            if (root.has("selectedBiomeIds") && root.get("selectedBiomeIds").isJsonArray()) {
-                session.selectedBiomeIds.clear();
-                JsonArray selectedBiomeIds = root.getAsJsonArray("selectedBiomeIds");
-                for (int i = 0; i < selectedBiomeIds.size(); i++) {
-                    try {
-                        session.selectedBiomeIds.add(selectedBiomeIds.get(i).getAsInt());
-                    } catch (Exception ignored) {
-                    }
-                }
-            }
-        } catch (Exception e) {
-            Cubeium.LOGGER.warn("[CubeiumSeedMapScreen] Failed to load settings", e);
-        }
-    }
-
-    private static Path getSettingsPath() {
-        return FabricLoader.getInstance().getConfigDir().resolve(SETTINGS_FILE_NAME);
+        CubeiumSeedMapSettingsStore.savePersistentSettings(session);
     }
 
     public static final class SeedMapSession {

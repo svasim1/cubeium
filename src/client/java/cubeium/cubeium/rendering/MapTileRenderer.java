@@ -14,6 +14,7 @@ import cubeium.cubeium.Cubeium;
 import cubeium.cubeium.seedmap.CubeiumSeedMapScreen;
 import cubeium.cubeium.util.RenderMetrics;
 import cubeium.cubeium.world.MapCache;
+import cubeium.cubeium.world.generation.BiomeGenerator;
 import net.minecraft.client.gui.DrawContext;
 
 /**
@@ -252,7 +253,7 @@ public class MapTileRenderer {
                 }
 
                 int biomeId = tile.biomeData[biomeIndex];
-                int color = getBiomeColor(biomeId);
+                int color = BiomeGenerator.getBiomeColor(biomeId);
                 if (session != null && !session.isBiomeVisible(biomeId)) {
                     color = 0xFF262626;
                 }
@@ -708,100 +709,6 @@ public class MapTileRenderer {
         }
 
         return null;
-    }
-    
-    /**
-     * Get biome color (optimized lookup)
-     */
-    public static int getBiomeColor(int biomeId) {
-        return switch (biomeId) {
-            case 0 -> 0xFF000070;
-            case 1 -> 0xFF8DB360;
-            case 2 -> 0xFFFA9418;
-            case 3 -> 0xFF606060;
-            case 4 -> 0xFF056621;
-            case 5 -> 0xFF0B6A5F;
-            case 6 -> 0xFF07F9B2;
-            case 7 -> 0xFF0000FF;
-            case 8 -> 0xFFFF0000;
-            case 9 -> 0xFF8080FF;
-            case 10 -> 0xFF7070D6;
-            case 11 -> 0xFFA0A0FF;
-            case 12 -> 0xFFE0E0E0;
-            case 13 -> 0xFFA0A0A0;
-            case 14 -> 0xFFFF00FF;
-            case 15 -> 0xFFA000FF;
-            case 16 -> 0xFFFFDE55;
-            case 17 -> 0xFFD25F12;
-            case 18 -> 0xFF22551C;
-            case 19 -> 0xFF163933;
-            case 20 -> 0xFF72789A;
-            case 21 -> 0xFF537B09;
-            case 22 -> 0xFF2C4205;
-            case 23 -> 0xFF628B17;
-            case 24 -> 0xFF000030;
-            case 25 -> 0xFFA2A284;
-            case 26 -> 0xFFFAF0C0;
-            case 27 -> 0xFF307444;
-            case 28 -> 0xFF1F0532;
-            case 29 -> 0xFF40511A;
-            case 30 -> 0xFF31554A;
-            case 31 -> 0xFF243F36;
-            case 32 -> 0xFF596651;
-            case 33 -> 0xFF45073E;
-            case 34 -> 0xFF507050;
-            case 35 -> 0xFFBDB25F;
-            case 36 -> 0xFFA79D64;
-            case 37 -> 0xFFD94515;
-            case 38 -> 0xFFB09765;
-            case 39 -> 0xFFCA8C65;
-            case 40, 41, 42, 43 -> 0xFF8080FF;
-            case 44 -> 0xFF0000AC;
-            case 45 -> 0xFF000090;
-            case 46 -> 0xFF202070;
-            case 47 -> 0xFF000050;
-            case 48 -> 0xFF000040;
-            case 49 -> 0xFF202038;
-            case 50 -> 0xFF404090;
-            case 127 -> 0xFF000000;
-            case 129 -> 0xFFB5DB88;
-            case 130 -> 0xFFFFBC40;
-            case 131 -> 0xFF888888;
-            case 132 -> 0xFF2D8E49;
-            case 133 -> 0xFF338E13;
-            case 134 -> 0xFF2FFF12;
-            case 140 -> 0xFFB4DCDC;
-            case 149 -> 0xFF7B0D31;
-            case 151 -> 0xFF8AB33F;
-            case 155 -> 0xFF589C6C;
-            case 156 -> 0xFF470F5A;
-            case 157 -> 0xFF687942;
-            case 158 -> 0xFF597D72;
-            case 160 -> 0xFF818E79;
-            case 161 -> 0xFF6D7766;
-            case 162 -> 0xFF783478;
-            case 163 -> 0xFFE5DA87;
-            case 165 -> 0xFFFF6D3D;
-            case 168 -> 0xFF849500;
-            case 169 -> 0xFFCFC58C;
-            case 170 -> 0xFFFF6D3D;
-            case 171 -> 0xFFD8BF8D;
-            case 172 -> 0xFFF2B48D;
-            case 173 -> 0xFF768E14;
-            case 174 -> 0xFF3B470A;
-            case 175 -> 0xFF522921;
-            case 177 -> 0xFF60A445;
-            case 178 -> 0xFF47726C;
-            case 179 -> 0xFFC4C4C4;
-            case 180 -> 0xFFDCDCC8;
-            case 181 -> 0xFFB0B3CE;
-            case 182 -> 0xFF7B8F74;
-            case 183 -> 0xFFDD0808;
-            case 184 -> 0xFF2CCC8E;
-            case 185 -> 0xFFFF91C8;
-            case 186 -> 0xFF696D95;
-            default -> 0xFFFF00FF;
-        };
     }
     
     /**

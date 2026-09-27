@@ -11,6 +11,7 @@ import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import cubeium.cubeium.Cubeium;
 import cubeium.cubeium.world.generation.BiomeGenerator;
 
 /**
@@ -71,7 +72,7 @@ public class MapCache {
                             Thread.currentThread().interrupt();
                             break;
                         } catch (Exception e) {
-                            System.err.println("[MapCache] Worker error: " + e.getMessage());
+                            Cubeium.LOGGER.warn("[MapCache] Worker error", e);
                         }
                     }
                 }, "MapCache-Worker-" + i);
@@ -165,13 +166,6 @@ public class MapCache {
         seedCaches.computeIfAbsent(seed, k -> new ConcurrentHashMap<>());
         seedAccessTimes.computeIfAbsent(seed, k -> new ConcurrentHashMap<>());
 
-        // Ensure BiomeGenerator seed is set once for this generation
-        try {
-            biomeGenerator.setSeed(seed, 0);
-        } catch (Exception e) {
-            System.err.println("[MapCache] Error setting BiomeGenerator seed: " + e.getMessage());
-        }
-
         // Enqueue viewport-first chunk tasks (with small buffer)
         int worldLeft = centerX - viewWidthBlocks / 2;
         int worldTop = centerZ - viewHeightBlocks / 2;
@@ -213,7 +207,7 @@ public class MapCache {
                     }
                 }
             } catch (Exception e) {
-                System.err.println("[MapCache] Enqueuer error: " + e.getMessage());
+                Cubeium.LOGGER.warn("[MapCache] Enqueuer error", e);
             } finally {
                 // mark generation finished once enqueuer completes (workers may still be processing)
                 isGenerating = false;
@@ -249,7 +243,7 @@ public class MapCache {
             return;
         }
         
-        int[] chunkData = generateChunkData(chunkX, chunkZ);
+        int[] chunkData = generateChunkData(seed, chunkX, chunkZ);
         if (chunkData != null) {
             putChunkWithEviction(seed, cache, coord, chunkData);
         }
@@ -258,49 +252,28 @@ public class MapCache {
     /**
      * Generate data for a single chunk
      */
-    private int[] generateChunkData(int chunkX, int chunkZ) {
-        int[] chunkData = new int[CHUNK_SIZE * CHUNK_SIZE];
-        final int BIOME_SCALE = 4;  // Biomes change every 4 blocks
-        
+    private int[] generateChunkData(long seed, int chunkX, int chunkZ) {
+        final int cellSize = BiomeGenerator.CELL_SIZE;
         try {
-            // Phase 3: Use bulk generateBiomes() instead of per-point getBiomeAt() calls.
-            // This single call replaces 256 (16x16) JNI calls per chunk, dramatically reducing
-            // lock contention and improving throughput.
-            int worldX = chunkX * CHUNK_SIZE;
-            int worldZ = chunkZ * CHUNK_SIZE;
-            BiomeGenerator.BiomeRegion region = biomeGenerator.generateBiomes(
-                worldX, worldZ, CHUNK_SIZE, CHUNK_SIZE, BIOME_SCALE
-            );
-            
-            if (region == null || region.biomes == null) {
-                return null;
-            }
-            
-            // Upscale each biome cell (4x4 block area) to fill the full chunk array
-            int cells = CHUNK_SIZE / BIOME_SCALE;
-            for (int cellZ = 0; cellZ < cells; cellZ++) {
-                for (int cellX = 0; cellX < cells; cellX++) {
-                    int biomeId = region.biomes[cellZ * cells + cellX];
-                    
-                    // Fill the 4x4 block region for this biome cell
-                    int baseX = cellX * BIOME_SCALE;
-                    int baseZ = cellZ * BIOME_SCALE;
-                    for (int lz = 0; lz < BIOME_SCALE; lz++) {
-                        int row = (baseZ + lz) * CHUNK_SIZE;
-                        for (int lx = 0; lx < BIOME_SCALE; lx++) {
-                            chunkData[row + baseX + lx] = biomeId;
-                        }
-                    }
+            int[] cells = biomeGenerator.generateCells(seed, chunkX * CHUNK_SIZE, chunkZ * CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE);
+
+            // Expand each biome cell to its cellSize x cellSize blocks.
+            int[] chunkData = new int[CHUNK_SIZE * CHUNK_SIZE];
+            int cells1d = CHUNK_SIZE / cellSize;
+            for (int z = 0; z < CHUNK_SIZE; z++) {
+                int cellRow = (z / cellSize) * cells1d;
+                int row = z * CHUNK_SIZE;
+                for (int x = 0; x < CHUNK_SIZE; x++) {
+                    chunkData[row + x] = cells[cellRow + x / cellSize];
                 }
             }
-            
             return chunkData;
         } catch (Exception e) {
-            System.err.println("[MapCache] Error generating chunk (" + chunkX + "," + chunkZ + "): " + e.getMessage());
+            Cubeium.LOGGER.warn("[MapCache] Error generating chunk ({}, {})", chunkX, chunkZ, e);
             return null;
         }
     }
-    
+
     /**
      * Get biome data for a specific area from cache
      */
@@ -313,8 +286,6 @@ public class MapCache {
             seedCaches.put(seed, cache);
         }
         seedAccessTimes.computeIfAbsent(seed, k -> new ConcurrentHashMap<>());
-        
-        //System.out.println("[MapCache] Cache found for seed: " + seed + " with " + cache.size() + " chunks");
         
         int[] result = new int[width * height];
         
@@ -340,7 +311,7 @@ public class MapCache {
                 
                 if (chunkData == null) {
                     // Generate chunk on-demand (synchronous fallback)
-                    chunkData = generateChunkData(chunkX, chunkZ);
+                    chunkData = generateChunkData(seed, chunkX, chunkZ);
                     if (chunkData != null) {
                         putChunkWithEviction(seed, cache, coord, chunkData);
                     }
@@ -361,7 +332,7 @@ public class MapCache {
                     result[pixelZ * width + pixelX] = biomeId;
                 } else {
                     // Phase 3: bulk generation in generateChunkData should now handle all cases
-                    result[pixelZ * width + pixelX] = 0; // Fallback to ocean if generation fails
+                    result[pixelZ * width + pixelX] = -1; // no data
                 }
             }
         }
@@ -457,7 +428,6 @@ public class MapCache {
         seedCaches.remove(seed);
         seedAccessTimes.remove(seed);
         generationTasks.remove(seed);
-        System.out.println("[MapCache] Cleared cache for seed: " + seed);
     }
     
     /**
@@ -468,7 +438,6 @@ public class MapCache {
         seedCaches.clear();
         seedAccessTimes.clear();
         generationTasks.clear();
-        System.out.println("[MapCache] Cleared all cached data");
     }
     
     /**
@@ -537,6 +506,5 @@ public class MapCache {
             generationExecutor.shutdownNow();
         }
         clearAll();
-        System.out.println("[MapCache] Shutdown complete");
     }
 }
