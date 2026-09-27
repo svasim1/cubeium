@@ -26,9 +26,4 @@ public enum Dimension {
             case END -> Cubiomes.DIM_END();
         };
     }
-
-    public Dimension next() {
-        Dimension[] all = values();
-        return all[(ordinal() + 1) % all.length];
-    }
 }

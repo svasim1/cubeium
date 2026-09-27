@@ -37,10 +37,6 @@ final class SwatchCheckbox extends AbstractButton {
         this.onChange = onChange;
     }
 
-    boolean selected() {
-        return selected;
-    }
-
     void setSelected(boolean selected) {
         this.selected = selected;
     }

@@ -160,14 +160,6 @@ public final class WorldGenerator {
         return Arrays.copyOf(out, count * 2);
     }
 
-    /** cubiomes' fast world spawn estimate {x, z} (Overworld only). */
-    public int[] spawnEstimate() {
-        try (Arena arena = Arena.ofConfined()) {
-            MemorySegment pos = Cubiomes.estimateSpawn(arena, generator.get(), MemorySegment.NULL);
-            return new int[] {Pos.x(pos), Pos.z(pos)};
-        }
-    }
-
     private MemorySegment createGenerator() {
         // Arena.ofAuto: freed by the GC once this thread and this WorldGenerator are gone.
         MemorySegment g = Generator.allocate(Arena.ofAuto());

@@ -88,7 +88,6 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
         }
     }
 
-    // ---- biomes ----
 
     private static List<String> compareBiomes(MinecraftServer server) {
         long seed = server.overworld().getSeed();
@@ -152,7 +151,6 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
 
     private static final Map<WorldGenerator, MemorySegment> GENERATORS = new LinkedHashMap<>();
 
-    // ---- slime chunks ----
 
     private static List<String> compareSlimeChunks(MinecraftServer server) {
         long seed = server.overworld().getSeed();
@@ -168,7 +166,6 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
         return mismatches == 0 ? List.of() : List.of("slime chunks: " + mismatches + " mismatches");
     }
 
-    // ---- structures ----
 
     private static List<String> compareStructures(MinecraftServer server) {
         long seed = server.overworld().getSeed();
@@ -358,7 +355,6 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
         return holders;
     }
 
-    // ---- UI ----
 
     /** Clicks at a GUI-pixel offset from a window position. */
     private static void clickGui(ClientGameTestContext context, double[] window, int dx, int dy) {
@@ -476,7 +472,11 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
 
         click(context, "cubeium.map.slime_chunks");
         context.getInput().setCursorPos(center[0], center[1]);
-        context.getInput().scroll(6);
+        context.waitTicks(2);
+        for (int notch = 0; notch < 2; notch++) {
+            context.getInput().scroll(1);
+            context.waitTick();
+        }
         context.waitTicks(60);
         context.takeScreenshot("cubeium-slime-chunks");
 

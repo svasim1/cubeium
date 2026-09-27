@@ -48,7 +48,7 @@ import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.storage.LevelResource;
 import org.jspecify.annotations.Nullable;
 
-/** The seed map: seed and dimension on top, the map, and Map/Structures/Biomes tabs below. */
+/** The seed map: seed and dimension on top, the map, and Map/Structures/Biomes/Waypoints tabs below. */
 public final class SeedMapScreen extends Screen {
     private static final int PAD = 8;
     private static final int BAR_Y = 20;
@@ -101,7 +101,6 @@ public final class SeedMapScreen extends Screen {
         panelTop = tabBarY + PanelTabBar.HEIGHT;
         int mapHeight = Math.max(40, tabBarY - 6 - MAP_Y);
 
-        // Top bar: seed, center on player, dimension ... settings.
         Component seedLabel = Component.translatable("cubeium.map.seed");
         StringWidget label = addRenderableWidget(new StringWidget(PAD, BAR_Y + 6, font.width(seedLabel), 9, seedLabel, font));
         int seedX = label.getRight() + 5;
@@ -572,8 +571,6 @@ public final class SeedMapScreen extends Screen {
         config.save();
         ScreenScale.restore(minecraft);
     }
-
-    // ---- helpers shared with the map widget ----
 
     static Dimension dimensionOf(Player player) {
         var dimension = player.level().dimension();

@@ -27,7 +27,6 @@ public final class CubeiumConfig {
     private static final Path FILE = FabricLoader.getInstance().getConfigDir().resolve("cubeium.json");
     private static CubeiumConfig instance;
 
-    // Settings screen
     public boolean darkMode = false;
     public boolean floatingTooltip = false;
     public boolean markerLabels = false;
@@ -37,16 +36,14 @@ public final class CubeiumConfig {
     /** GUI scale of the map screens; 0 = automatic. */
     public int mapUiScale = 0;
 
-    // Map tab
     public boolean regionGrid = false;
     public boolean coordinateAxes = true;
     public boolean panelCollapsed = false;
     public boolean slimeChunks = false;
 
-    // Structures tab: StructureKind keys
+    /** Enabled structures, by {@link StructureKind#key()}. */
     public Set<String> structures = new LinkedHashSet<>(defaultStructures());
 
-    // Biomes tab
     public boolean highlightBiomes = false;
     public Set<Integer> highlightedBiomes = new LinkedHashSet<>();
 
