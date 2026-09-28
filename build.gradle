@@ -10,6 +10,11 @@ base {
 	archivesName = project.archives_base_name
 }
 
+configurations {
+	// Source code of the bundled LGPL bindings, shipped inside the mod jar (see licenses/NOTICE.txt).
+	bindingsSources { transitive = false }
+}
+
 repositories {
 	// cubiomes Java bindings (FFM) with bundled natives, https://github.com/xpple/cubiomes/tree/java-bindings
 	maven {
@@ -48,6 +53,7 @@ dependencies {
 
 	// Bundled into the mod jar (jar-in-jar); the version pins the cubiomes commit after the '+'.
 	include implementation("dev.xpple:cubiomes:${project.cubiomes_version}")
+	bindingsSources "dev.xpple:cubiomes:${project.cubiomes_version}:sources"
 
 	testImplementation platform("org.junit:junit-bom:${project.junit_version}")
 	testImplementation "org.junit.jupiter:junit-jupiter"
@@ -88,12 +94,32 @@ test {
 	jvmArgs '--enable-native-access=ALL-UNNAMED'
 }
 
+// The Java source of the bundled bindings, without the prebuilt natives that the sources jar repeats.
+def bindingsSourceZip = tasks.register("bindingsSourceZip", Zip) {
+	archiveFileName = "cubiomes-bindings-${project.cubiomes_version}-sources.zip"
+	destinationDirectory = layout.buildDirectory.dir("bindingsSources")
+	from({ zipTree(configurations.bindingsSources.singleFile) }) {
+		include "**/*.java"
+	}
+}
+
 jar {
 	def projectName = project.base.archivesName.get()
 	inputs.property "projectName", projectName
 
 	from("LICENSE") {
 		rename { "${it}_$projectName" }
+	}
+	// LGPL-3.0 obligations for the bundled cubiomes bindings: license texts, notice and source.
+	def bindingsVersion = project.cubiomes_version
+	inputs.property "bindingsVersion", bindingsVersion
+	into("META-INF/licenses/cubiomes-bindings") {
+		from("licenses") {
+			filesMatching("NOTICE.txt") {
+				expand bindingsVersion: bindingsVersion, cubiomesCommit: bindingsVersion.substring(bindingsVersion.indexOf('+') + 1)
+			}
+		}
+		from(bindingsSourceZip)
 	}
 }
 

@@ -66,6 +66,7 @@ Cubeium is MIT licensed (see `LICENSE`).
 
 The jar bundles, unmodified, xpple's [cubiomes Java bindings](https://github.com/xpple/cubiomes/tree/java-bindings)
 (LGPL-3.0), which include [cubiomes](https://github.com/Cubitect/cubiomes) by Cubitect (MIT).
-Their license texts ship inside the bundled jar.
+Their license texts, a notice and the bindings' source code are included in the mod jar under
+`META-INF/licenses/cubiomes-bindings/`.
 
 Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.
