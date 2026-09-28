@@ -1,60 +1,33 @@
 package cubeium.cubeium;
 
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
-import cubeium.cubeium.seedmap.CubeiumSeedMapScreen;
+import cubeium.cubeium.screen.SeedMapScreen;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
-import net.minecraft.client.option.KeyBinding;
-import net.minecraft.client.util.InputUtil;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.resources.Identifier;
 
 public class CubeiumClient implements ClientModInitializer {
-    private long tickCount = 0;
-    private boolean firstTickLogged = false;
+    private static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(Cubeium.MOD_ID, "main"));
+    private static KeyMapping openMap;
+
+    public static KeyMapping openMapKey() {
+        return openMap;
+    }
 
     @Override
     public void onInitializeClient() {
-        Cubeium.LOGGER.info("[Cubeium] Client initializer starting");
+        openMap = KeyMappingHelper.registerKeyMapping(new KeyMapping(
+                "key.cubeium.seedmap", InputConstants.Type.KEYBOARD, InputConstants.KEY_M, CATEGORY));
 
-        // Register the key binding
-        Cubeium.seedMapKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.cubeium.seedmap",
-                InputUtil.Type.KEYSYM,
-                GLFW.GLFW_KEY_M,
-                "category.cubeium.keybinds"));
-        Cubeium.LOGGER.info("[Cubeium] Registered keybind key.cubeium.seedmap on key M");
-
-        // Register key binding tick event
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            tickCount++;
-
-            if (!firstTickLogged) {
-                firstTickLogged = true;
-                Cubeium.LOGGER.info("[Cubeium] END_CLIENT_TICK callback is active");
-            }
-
-            KeyBinding seedMapKey = (KeyBinding) Cubeium.seedMapKey;
-            if (seedMapKey == null) {
-                Cubeium.LOGGER.error("[Cubeium] Seed map key is null in tick callback");
-                return;
-            }
-
-            if (seedMapKey.wasPressed()) {
-                Cubeium.LOGGER.info("[Cubeium] Seed map key pressed at tick {}", tickCount);
-                // Quiet mode: do not send a chat message when opening the seed map screen
-
-                try {
-                    client.setScreen(new CubeiumSeedMapScreen());
-                    Cubeium.LOGGER.info("[Cubeium] Seed map screen opened successfully");
-                } catch (Exception e) {
-                    Cubeium.LOGGER.error("[Cubeium] Failed to open seed map screen", e);
+            while (openMap.consumeClick()) {
+                if (client.gui.screen() == null) {
+                    client.gui.setScreen(new SeedMapScreen());
                 }
             }
         });
-
-    // JNI test runner removed from client initialization to avoid runtime/compile-time dependency
-
-        Cubeium.LOGGER.info("[Cubeium] Client initializer complete");
     }
 }

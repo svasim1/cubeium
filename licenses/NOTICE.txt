@@ -1,0 +1,25 @@
+Cubeium bundles the following third-party library.
+
+cubiomes Java bindings
+  Version:    ${bindingsVersion}
+  Author:     xpple
+  License:    GNU Lesser General Public License, version 3 (LGPL-3.0).
+              The full texts of the LGPL (LGPL-3.0.txt) and of the GPL it builds on (GPL-3.0.txt)
+              are included next to this notice.
+  Source:     cubiomes-bindings-*-sources.zip next to this notice contains the Java source of the
+              bundled classes. The complete project, including its build scripts, is available at
+              https://github.com/xpple/cubiomes/tree/java-bindings
+  Location:   META-INF/jars/cubiomes-${bindingsVersion}.jar inside the Cubeium jar
+
+  The library's code is bundled unmodified, as a separate jar. The only addition is a small
+  generated fabric.mod.json that lets Fabric Loader load it. You may replace it with a modified
+  version of the library that keeps the same interface.
+
+  The bindings contain native builds of these MIT-licensed C libraries, whose license texts
+  ship inside the bundled jar (LICENSE_cubiomes.txt, LICENSE_loot_library.h.txt):
+    cubiomes, Copyright (c) 2020 Cubitect, https://github.com/Cubitect/cubiomes
+              (built from xpple's fork, https://github.com/xpple/cubiomes, commit
+              ${cubiomesCommit})
+    loot_library.h, Copyright (c) 2024 ScriptLine
+
+Cubeium itself is MIT licensed; see LICENSE_cubeium in the jar.

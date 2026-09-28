@@ -1,5 +1,5 @@
 plugins {
-	id 'fabric-loom' version '1.10-SNAPSHOT'
+	id 'net.fabricmc.fabric-loom' version "${loom_version}"
 	id 'maven-publish'
 }
 
@@ -10,12 +10,18 @@ base {
 	archivesName = project.archives_base_name
 }
 
+configurations {
+	// Source code of the bundled LGPL bindings, shipped inside the mod jar (see licenses/NOTICE.txt).
+	bindingsSources { transitive = false }
+}
+
 repositories {
-	// Add repositories to retrieve artifacts from in here.
-	// You should only use this when depending on other mods because
-	// Loom adds the essential maven repositories to download Minecraft and libraries from automatically.
-	// See https://docs.gradle.org/current/userguide/declaring_repositories.html
-	// for more information about repositories.
+	// cubiomes Java bindings (FFM) with bundled natives, https://github.com/xpple/cubiomes/tree/java-bindings
+	maven {
+		name = 'xpple'
+		url = 'https://maven.xpple.dev/maven2'
+		content { includeGroup 'dev.xpple' }
+	}
 }
 
 loom {
@@ -27,322 +33,96 @@ loom {
 			sourceSet sourceSets.client
 		}
 	}
+}
 
+// In-game tests (src/gametest): ./gradlew runClientGameTest launches the real client.
+fabricApi {
+	configureTests {
+		createSourceSet = true
+		modId = "cubeium-gametest"
+		enableGameTests = false
+		enableClientGameTests = true
+	}
 }
 
 dependencies {
 	// To change the versions see the gradle.properties file
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
-	mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
-	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 
-	// Fabric API. This is technically optional, but you probably want it anyway.
-	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
-	
+	// Bundled into the mod jar (jar-in-jar); the version pins the cubiomes commit after the '+'.
+	include implementation("dev.xpple:cubiomes:${project.cubiomes_version}")
+	bindingsSources "dev.xpple:cubiomes:${project.cubiomes_version}:sources"
+
+	testImplementation platform("org.junit:junit-bom:${project.junit_version}")
+	testImplementation "org.junit.jupiter:junit-jupiter"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 }
-
-// ========================================
-// Native Library (Cubiomes) Build Tasks
-// ========================================
-
-def cubiomesDir = file('cubiomesBuild')
-def cubiomesBuildDir = file("${cubiomesDir}/build")
-def cubiomesLibDir = file("${cubiomesDir}/lib")
-def nativeResourcesDir = file('src/main/resources/natives')
-
-// Detect operating system and architecture
-def getOSName() {
-	def os = System.getProperty('os.name').toLowerCase()
-	if (os.contains('windows')) {
-		return 'windows'
-	} else if (os.contains('linux')) {
-		return 'linux'
-	} else if (os.contains('mac') || os.contains('darwin')) {
-		return 'macos'
-	} else {
-		return 'unknown'
-	}
-}
-
-def getArchName() {
-	def arch = System.getProperty('os.arch').toLowerCase()
-	if (arch.contains('amd64') || arch.contains('x86_64')) {
-		return 'x64'
-	} else if (arch.contains('aarch64') || arch.contains('arm64')) {
-		return 'arm64'
-	} else if (arch.contains('x86') || arch.contains('i386')) {
-		return 'x86'
-	} else {
-		return arch
-	}
-}
-
-def osName = getOSName()
-def archName = getArchName()
-
-def isCmakeAvailable() {
-	try {
-		def result = ['cmake', '--version'].execute()
-		result.waitFor()
-		return result.exitValue() == 0
-	} catch (Exception ignored) {
-		return false
-	}
-}
-
-def cmakeAvailable = isCmakeAvailable()
-
-// Task to configure CMake
-task configureCubiomes(type: Exec) {
-	group = 'native'
-	description = 'Configure cubiomes library with CMake'
-	onlyIf { cmakeAvailable }
-	
-	workingDir cubiomesDir
-	
-	doFirst {
-		cubiomesBuildDir.mkdirs()
-		
-		// Check if cmake is available
-		try {
-			def result = ['cmake', '--version'].execute()
-			result.waitFor()
-			if (result.exitValue() != 0) {
-				throw new GradleException("CMake is not available. Please install CMake and add it to your PATH.")
-			}
-		} catch (IOException e) {
-			throw new GradleException("CMake is not available. Please install CMake and add it to your PATH.\n" +
-				"Windows: Download from https://cmake.org/download/\n" +
-				"macOS: brew install cmake\n" +
-				"Linux: sudo apt install cmake (Ubuntu/Debian) or sudo yum install cmake (CentOS/RHEL)")
-		}
-	}
-	
-	if (osName == 'windows') {
-		// For Windows with GCC, use MinGW Makefiles generator
-		commandLine 'cmake', '-B', 'build', '-S', '.', '-G', 'MinGW Makefiles', '-DCMAKE_BUILD_TYPE=Release'
-	} else {
-		commandLine 'cmake', '-B', 'build', '-S', '.', '-DCMAKE_BUILD_TYPE=Release'
-	}
-	
-	inputs.files fileTree(cubiomesDir) {
-		include '*.c', '*.h', 'CMakeLists.txt'
-	}
-	outputs.dir cubiomesBuildDir
-}
-
-// Task to build cubiomes library
-task buildCubiomes(type: Exec) {
-	group = 'native'
-	description = 'Build cubiomes shared library'
-	dependsOn configureCubiomes
-	onlyIf { cmakeAvailable }
-	
-	workingDir cubiomesDir
-	
-	if (osName == 'windows') {
-		commandLine 'cmake', '--build', 'build', '--config', 'Release'
-	} else {
-		commandLine 'cmake', '--build', 'build', '--config', 'Release', '--', '-j4'
-	}
-	
-	inputs.files fileTree(cubiomesDir) {
-		include '*.c', '*.h', 'CMakeLists.txt'
-	}
-	outputs.dir cubiomesLibDir
-}
-
-// Task to copy native libraries to resources
-task copyNativeLibraries(type: Copy) {
-	group = 'native'
-	description = 'Copy native libraries to resources directory'
-	dependsOn buildCubiomes
-	onlyIf { cmakeAvailable }
-	
-	from cubiomesLibDir
-	into "${nativeResourcesDir}/${osName}/${archName}"
-	
-	if (osName == 'windows') {
-		include '*.dll'
-	} else if (osName == 'macos') {
-		include '*.dylib'
-	} else {
-		include '*.so'
-	}
-	
-	doFirst {
-		nativeResourcesDir.mkdirs()
-	}
-}
-
-// Task to clean cubiomes build artifacts
-task cleanCubiomes(type: Delete) {
-	group = 'native'
-	description = 'Clean cubiomes build artifacts'
-	delete cubiomesBuildDir
-	delete cubiomesLibDir
-	delete nativeResourcesDir
-}
-
-// Task to generate JNI headers
-task generateJNIHeaders {
-	group = 'native'
-	description = 'Generate JNI headers for native methods'
-	dependsOn compileClientJava
-	
-	def jniHeadersDir = file("${cubiomesDir}/jni")
-	def clientClassesDir = file('build/classes/java/client')
-	
-	doFirst {
-		jniHeadersDir.mkdirs()
-	}
-	
-	doLast {
-		println "Generating JNI headers to: ${jniHeadersDir}"
-		
-		// Use javac -h with minimal classpath - just compile the single file
-		exec {
-			workingDir project.rootDir
-			
-			// Create a minimal classpath with only essential dependencies
-			def minimalCp = configurations.compileClasspath.filter { 
-				it.name.contains('slf4j') || it.name.contains('fabric-api')
-			}.asPath
-			
-			commandLine 'javac', 
-				'-h', jniHeadersDir.absolutePath,
-				'-cp', minimalCp,
-				'-d', clientClassesDir.absolutePath,
-				'src/client/java/cubeium/cubeium/world/CubiomesInterface.java',
-				'src/client/java/cubeium/cubeium/world/NativeLibraryLoader.java'
-		}
-	}
-	
-	inputs.files fileTree('src/client/java/cubeium/cubeium/world') {
-		include '*.java'
-	}
-	outputs.dir jniHeadersDir
-}
-
-// Task to check native build requirements
-task checkNativeBuildRequirements {
-	group = 'native'
-	description = 'Check if native build requirements are met'
-	
-	doLast {
-		println "Checking native build requirements..."
-		
-		// Check CMake
-		try {
-			def result = ['cmake', '--version'].execute()
-			result.waitFor()
-			if (result.exitValue() == 0) {
-				def version = result.text.readLines()[0]
-				println "✓ CMake found: ${version}"
-			} else {
-				println "✗ CMake not working properly"
-			}
-		} catch (Exception e) {
-			println "✗ CMake not found"
-			println "  Please install CMake from https://cmake.org/download/"
-			println "  Or see NATIVE_SETUP.md for detailed instructions"
-		}
-		
-		// Check compiler
-		if (osName == 'windows') {
-			println "Platform: Windows ${archName}"
-			println "Compiler: Visual Studio or MinGW-w64 required"
-		} else if (osName == 'macos') {
-			println "Platform: macOS ${archName}"
-			try {
-				def result = ['clang', '--version'].execute()
-				result.waitFor()
-				if (result.exitValue() == 0) {
-					println "✓ Clang compiler found"
-				}
-			} catch (Exception e) {
-				println "✗ Clang not found - install Xcode command line tools"
-			}
-		} else if (osName == 'linux') {
-			println "Platform: Linux ${archName}"
-			try {
-				def result = ['gcc', '--version'].execute()
-				result.waitFor()
-				if (result.exitValue() == 0) {
-					println "✓ GCC compiler found"
-				}
-			} catch (Exception e) {
-				println "✗ GCC not found - install build-essential"
-			}
-		}
-		
-		println "\nTo build native libraries, run: ./gradlew buildCubiomes"
-		println "For setup instructions, see: NATIVE_SETUP.md"
-	}
-}
-
-// Make native library building part of the main build process (but only if CMake is available)
-// For development without CMake, you can skip native compilation with: ./gradlew build -x copyNativeLibraries
-if (cmakeAvailable) {
-	compileJava.dependsOn copyNativeLibraries
-	println "CMake found - native libraries will be built automatically"
-} else {
-	println "CMake not available - skipping native library build"
-	println "Run './gradlew checkNativeBuildRequirements' for setup instructions"
-}
-clean.dependsOn cleanCubiomes
 
 processResources {
-	inputs.property "version", project.version
-	
-	// Only build/copy natives when CMake is available.
-	if (cmakeAvailable) {
-		dependsOn copyNativeLibraries
-	}
-	
-	// Include native libraries in the jar
-	from(nativeResourcesDir) {
-		into 'natives'
-	}
-	
-	// Handle duplicate files
-	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+	def version = project.version
+	inputs.property "version", version
 
 	filesMatching("fabric.mod.json") {
-		expand "version": inputs.properties.version
+		expand "version": version
 	}
 }
 
 tasks.withType(JavaCompile).configureEach {
-	it.options.release = 21
+	it.options.release = 25
 }
 
 java {
-	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
-	// if it is present.
-	// If you remove this line, sources will not be generated.
 	withSourcesJar()
 
-	sourceCompatibility = JavaVersion.VERSION_21
-	targetCompatibility = JavaVersion.VERSION_21
+	sourceCompatibility = JavaVersion.VERSION_25
+	targetCompatibility = JavaVersion.VERSION_25
 }
 
-// Ensure sourcesJar waits for native libraries
-tasks.sourcesJar {
-	if (cmakeAvailable) {
-		dependsOn copyNativeLibraries
+// Unit tests exercise the client-side cubiomes bindings (no Minecraft needed).
+sourceSets {
+	test {
+		compileClasspath += sourceSets.client.output
+		runtimeClasspath += sourceSets.client.output
+	}
+}
+
+test {
+	useJUnitPlatform()
+	// The bindings call restricted FFM methods; allow them without warnings.
+	jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+
+// The Java source of the bundled bindings, without the prebuilt natives that the sources jar repeats.
+def bindingsSourceZip = tasks.register("bindingsSourceZip", Zip) {
+	archiveFileName = "cubiomes-bindings-${project.cubiomes_version}-sources.zip"
+	destinationDirectory = layout.buildDirectory.dir("bindingsSources")
+	from({ zipTree(configurations.bindingsSources.singleFile) }) {
+		include "**/*.java"
 	}
 }
 
 jar {
-	inputs.property "archivesName", project.base.archivesName
+	def projectName = project.base.archivesName.get()
+	inputs.property "projectName", projectName
 
 	from("LICENSE") {
-		rename { "${it}_${inputs.properties.archivesName}"}
+		rename { "${it}_$projectName" }
+	}
+	// LGPL-3.0 obligations for the bundled cubiomes bindings: license texts, notice and source.
+	def bindingsVersion = project.cubiomes_version
+	inputs.property "bindingsVersion", bindingsVersion
+	into("META-INF/licenses/cubiomes-bindings") {
+		from("licenses") {
+			filesMatching("NOTICE.txt") {
+				expand bindingsVersion: bindingsVersion, cubiomesCommit: bindingsVersion.substring(bindingsVersion.indexOf('+') + 1)
+			}
+		}
+		from(bindingsSourceZip)
 	}
 }
 
-// configure the maven publication
 publishing {
 	publications {
 		create("mavenJava", MavenPublication) {
@@ -351,11 +131,6 @@ publishing {
 		}
 	}
 
-	// See https://docs.gradle.org/current/userguide/publishing_maven.html for information on how to set up publishing.
 	repositories {
-		// Add repositories to publish to here.
-		// Notice: This block does NOT have the same function as the block in the top level.
-		// The repositories here will be used for publishing your artifact, not for
-		// retrieving dependencies.
 	}
 }
