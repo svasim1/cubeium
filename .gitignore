@@ -39,14 +39,5 @@ replay_*.log
 *.hprof
 *.jfr
 
-# Instructions
-/instructions/
-/documentation.txt
-/documentation/
-
-# Cubiomes
-/cubiomes/
-/amidst/
-cubiomes-viewer/
 # Logs written by local test runs
 /logs/
