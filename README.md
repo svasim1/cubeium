@@ -5,7 +5,8 @@
 An in-game seed map for Minecraft. Press **M** to see your world's biomes, structures and slime
 chunks without leaving the game.
 
-Client-side Fabric mod for **Minecraft 26.2** (Fabric API required).
+Client-side Fabric mod (Fabric API required). Download the jar for your Minecraft version from
+[Releases](https://github.com/svasim1/cubeium/releases).
 
 ## Features
 
