@@ -21,7 +21,7 @@ import org.jspecify.annotations.Nullable;
  */
 final class MapSession {
     /** The cubiomes version matching the Minecraft version this build of the mod targets. */
-    static final int MC_VERSION = Cubiomes.MC_26_3();
+    static final int MC_VERSION = Cubiomes.MC_26_2();
 
     private static @Nullable MapSession instance;
 

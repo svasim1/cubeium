@@ -20,7 +20,7 @@ public class CubeiumClient implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
         openMap = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-                "key.cubeium.seedmap", InputConstants.Type.KEYBOARD, InputConstants.KEY_M, CATEGORY));
+                "key.cubeium.seedmap", InputConstants.Type.KEYSYM, InputConstants.KEY_M, CATEGORY));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openMap.consumeClick()) {

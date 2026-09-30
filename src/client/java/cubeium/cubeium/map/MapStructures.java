@@ -42,6 +42,11 @@ public final class MapStructures {
         return found;
     }
 
+    /** Whether the kind exists in this world's Minecraft version. */
+    public boolean supports(StructureKind kind) {
+        return finder.supports(kind);
+    }
+
     /** Whether a kind is searched at this zoom (markers of widely spaced kinds would otherwise pile up). */
     public boolean visibleAt(StructureKind kind, double blocksPerPixel) {
         if (!finder.supports(kind)) {
