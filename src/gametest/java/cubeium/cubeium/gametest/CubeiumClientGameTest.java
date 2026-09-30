@@ -180,6 +180,9 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
             };
             StructureFinder finder = new StructureFinder(new WorldGenerator(MC, seed, dimension));
             for (StructureKind kind : StructureKind.in(dimension)) {
+                if (!finder.supports(kind)) {
+                    continue; // not in this Minecraft version
+                }
                 if (kind == StructureKind.STRONGHOLD) {
                     compareStrongholds(level, finder, failures);
                 } else if (kind == StructureKind.END_GATEWAY) {

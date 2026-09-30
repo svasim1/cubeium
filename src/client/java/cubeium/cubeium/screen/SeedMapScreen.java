@@ -10,6 +10,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import cubeium.cubeium.CubeiumClient;
 import cubeium.cubeium.config.CubeiumConfig;
 import cubeium.cubeium.config.Waypoint;
+import cubeium.cubeium.map.MapStructures;
 import cubeium.cubeium.map.MapView;
 import cubeium.cubeium.world.Biomes;
 import cubeium.cubeium.world.Dimension;
@@ -305,7 +306,11 @@ public final class SeedMapScreen extends Screen {
         int columnWidth = (panelWidth - 20) / columns;
         GridLayout list = new GridLayout().rowSpacing(3);
         GridLayout.RowHelper rows = list.createRowHelper(columns);
+        MapStructures structures = session.structures();
         for (StructureKind kind : StructureKind.in(session.dimension)) {
+            if (structures != null && !structures.supports(kind)) {
+                continue;
+            }
             rows.addChild(Checkbox.builder(Component.translatable("cubeium.structure." + kind.key()), font)
                     .maxWidth(columnWidth - 4)
                     .selected(config.structures.contains(kind.key()))
