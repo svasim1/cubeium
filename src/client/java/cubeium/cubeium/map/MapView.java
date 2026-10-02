@@ -9,6 +9,8 @@ public final class MapView {
     public static final int MIN_ZOOM = -2;
     public static final int MAX_ZOOM = 8;
     public static final int DEFAULT_ZOOM = 2;
+    /** Minecraft's world border; the view never leaves it, which also keeps tile math in range. */
+    public static final double WORLD_LIMIT = 30_000_000;
 
     private double centerX;
     private double centerZ;
@@ -32,8 +34,8 @@ public final class MapView {
     }
 
     public void center(double x, double z) {
-        centerX = x;
-        centerZ = z;
+        centerX = Math.clamp(x, -WORLD_LIMIT, WORLD_LIMIT);
+        centerZ = Math.clamp(z, -WORLD_LIMIT, WORLD_LIMIT);
     }
 
     public void setZoom(int zoom) {
@@ -45,14 +47,12 @@ public final class MapView {
         double before = blocksPerPixel();
         setZoom(zoom + steps);
         double after = blocksPerPixel();
-        centerX += dx * (before - after);
-        centerZ += dz * (before - after);
+        center(centerX + dx * (before - after), centerZ + dz * (before - after));
     }
 
     /** Pans by a GUI-pixel delta (dragging the map moves the world the other way). */
     public void panPixels(double dx, double dy) {
         double bpp = blocksPerPixel();
-        centerX -= dx * bpp;
-        centerZ -= dy * bpp;
+        center(centerX - dx * bpp, centerZ - dy * bpp);
     }
 }
