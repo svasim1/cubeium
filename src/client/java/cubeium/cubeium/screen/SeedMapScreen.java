@@ -533,25 +533,30 @@ public final class SeedMapScreen extends Screen {
         return Component.translatable("cubeium.dimension." + dimension.key());
     }
 
-    /** Teleporting is offered only when enabled and the server lets this player run /tp. */
+    /** Teleporting is offered only when enabled and the server lets this player run the commands. */
     static boolean canTeleport() {
         Minecraft minecraft = Minecraft.getInstance();
         ClientPacketListener connection = minecraft.getConnection();
         return CubeiumConfig.get().teleportInMenu && minecraft.player != null && connection != null
-                && connection.getCommands().getRoot().getChild("tp") != null;
+                && connection.getCommands().getRoot().getChild("spreadplayers") != null
+                && connection.getCommands().getRoot().getChild("execute") != null;
     }
 
+    /**
+     * Teleports onto the ground at a column. /spreadplayers picks a safe surface block instead of
+     * keeping the current height like /tp, so the End void or the Nether roof cannot kill the
+     * player; where there is no safe ground the command just fails. In the Nether it searches below
+     * the bedrock roof.
+     */
     static void teleport(Dimension dimension, int x, int z) {
         Minecraft minecraft = Minecraft.getInstance();
         ClientPacketListener connection = minecraft.getConnection();
         if (connection == null || minecraft.player == null) {
             return;
         }
-        if (dimensionOf(minecraft.player) == dimension) {
-            connection.sendCommand(String.format(Locale.ROOT, "tp @s %d ~ %d", x, z));
-        } else {
-            connection.sendCommand(String.format(Locale.ROOT, "execute in minecraft:%s run tp @s %d ~ %d", dimension.key(), x, z));
-        }
+        String under = dimension == Dimension.NETHER ? "under 120 " : "";
+        connection.sendCommand(String.format(Locale.ROOT, "execute in minecraft:%s run spreadplayers %d %d 0 1 %sfalse @s",
+                dimension.key(), x, z, under));
     }
 
     /** Identifies the current world so each keeps its own seed. */

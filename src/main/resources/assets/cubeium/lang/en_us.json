@@ -36,7 +36,7 @@
   "cubeium.settings.marker_labels": "Marker Labels",
   "cubeium.settings.marker_labels.tooltip": "Writes the structure name under each marker.",
   "cubeium.settings.teleport": "Teleport in Menu",
-  "cubeium.settings.teleport.tooltip": "Adds \"Teleport here\" to the map's right-click menu. Only shown when you are allowed to use /tp.",
+  "cubeium.settings.teleport.tooltip": "Adds \"Teleport here\" to the map's right-click menu, which puts you safely on the ground there. Only shown when you are allowed to use commands like /tp.",
   "cubeium.settings.keep_position": "Keep Map Position",
   "cubeium.settings.keep_position.tooltip": "Reopens the map where you left it instead of on your position.",
   "cubeium.settings.render_metrics": "Render Metrics",
