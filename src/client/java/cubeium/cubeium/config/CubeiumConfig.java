@@ -43,6 +43,8 @@ public final class CubeiumConfig {
 
     /** Enabled structures, by {@link StructureKind#key()}. */
     public Set<String> structures = new LinkedHashSet<>(defaultStructures());
+    /** Structures this file has seen; ones added by a later update get their default setting. */
+    public Set<String> knownStructures = allStructures();
 
     public boolean highlightBiomes = false;
     public Set<Integer> highlightedBiomes = new LinkedHashSet<>();
@@ -111,9 +113,24 @@ public final class CubeiumConfig {
     /** Gson leaves fields missing from an older file null. */
     private void repairNulls() {
         if (structures == null) structures = new LinkedHashSet<>(defaultStructures());
+        if (knownStructures == null) knownStructures = allStructures();
+        Set<String> defaults = defaultStructures();
+        for (String key : allStructures()) {
+            if (knownStructures.add(key) && defaults.contains(key)) {
+                structures.add(key);
+            }
+        }
         if (highlightedBiomes == null) highlightedBiomes = new LinkedHashSet<>();
         if (seeds == null) seeds = new LinkedHashMap<>();
         if (waypoints == null) waypoints = new LinkedHashMap<>();
+    }
+
+    private static Set<String> allStructures() {
+        Set<String> keys = new LinkedHashSet<>();
+        for (StructureKind kind : StructureKind.values()) {
+            keys.add(kind.key());
+        }
+        return keys;
     }
 
     private static Set<String> defaultStructures() {
