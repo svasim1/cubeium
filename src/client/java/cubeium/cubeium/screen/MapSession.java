@@ -1,6 +1,5 @@
 package cubeium.cubeium.screen;
 
-import java.util.Set;
 import java.util.function.IntUnaryOperator;
 
 import cubeium.cubeium.config.CubeiumConfig;
@@ -81,8 +80,12 @@ final class MapSession {
         if (!config.highlightBiomes) {
             return Biomes::color;
         }
-        Set<Integer> selected = Set.copyOf(config.highlightedBiomes);
-        return id -> selected.contains(id) ? Biomes.color(id) : dimmed(Biomes.color(id));
+        // A lookup table: tiles are recolored per texel, so this stays cheap.
+        int[] colors = new int[Biomes.ID_LIMIT];
+        for (int id = 0; id < colors.length; id++) {
+            colors[id] = config.highlightedBiomes.contains(id) ? Biomes.color(id) : dimmed(Biomes.color(id));
+        }
+        return id -> id >= 0 && id < colors.length ? colors[id] : Biomes.color(id);
     }
 
     /** Non-highlighted biomes: desaturated and dark, but still recognisable. */
