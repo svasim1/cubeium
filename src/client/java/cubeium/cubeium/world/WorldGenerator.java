@@ -80,7 +80,7 @@ public final class WorldGenerator {
             if (err != 0) {
                 throw new IllegalStateException("cubiomes genBiomes failed (" + err + ") at scale " + scale);
             }
-            return Arrays.copyOf(cache.toArray(ValueLayout.JAVA_INT), width * height);
+            return cache.asSlice(0, (long) width * height * Integer.BYTES).toArray(ValueLayout.JAVA_INT);
         }
     }
 

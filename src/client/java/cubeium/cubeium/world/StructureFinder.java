@@ -28,6 +28,8 @@ public final class StructureFinder {
     private static final int BLOCK = 16;
     private static final int MAX_CACHED_BLOCKS = 50_000;
     private static final int STRONGHOLD_COUNT = 128;
+    /** Output buffer for getStructurePos, one per thread instead of one allocation per region. */
+    private static final ThreadLocal<MemorySegment> POS = ThreadLocal.withInitial(() -> Pos.allocate(Arena.ofAuto()));
 
     private final WorldGenerator world;
     /** Per kind: cache block key -> positions found in it, as {x0, z0, x1, z1, ...}. */
@@ -122,15 +124,11 @@ public final class StructureFinder {
 
     private int[] locate(StructureKind kind, int regionX, int regionZ) {
         int type = kind.cubiomesType();
-        int x, z;
-        try (Arena arena = Arena.ofConfined()) {
-            MemorySegment pos = Pos.allocate(arena);
-            if (Cubiomes.getStructurePos(type, world.mcVersion(), world.seed(), regionX, regionZ, pos) == 0) {
-                return NONE;
-            }
-            x = Pos.x(pos);
-            z = Pos.z(pos);
+        MemorySegment pos = POS.get();
+        if (Cubiomes.getStructurePos(type, world.mcVersion(), world.seed(), regionX, regionZ, pos) == 0) {
+            return NONE;
         }
+        int x = Pos.x(pos), z = Pos.z(pos);
         boolean viable = switch (kind) {
             case END_CITY -> world.isViableEndCity(x, z) && !world.endCityHasShip(x, z);
             case END_CITY_SHIP -> world.isViableEndCity(x, z) && world.endCityHasShip(x, z);
