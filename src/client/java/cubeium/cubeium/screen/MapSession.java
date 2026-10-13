@@ -39,19 +39,20 @@ final class MapSession {
         return instance;
     }
 
-    /** Switches to a seed/dimension; keeps everything cached when nothing changed. */
-    void show(@Nullable Long seed, Dimension dimension) {
+    /** Switches to a seed/dimension/preset; keeps everything cached when nothing changed. */
+    void show(@Nullable Long seed, Dimension dimension, boolean largeBiomes) {
         this.dimension = dimension;
         if (seed == null) {
             clear();
             return;
         }
-        if (tiles != null && seed.equals(this.seed) && tiles.world().dimension() == dimension) {
+        if (tiles != null && seed.equals(this.seed) && tiles.world().dimension() == dimension
+                && tiles.world().largeBiomes() == largeBiomes) {
             return;
         }
         clear();
         this.seed = seed;
-        WorldGenerator world = new WorldGenerator(MC_VERSION, seed, dimension);
+        WorldGenerator world = new WorldGenerator(MC_VERSION, seed, dimension, largeBiomes);
         tiles = new MapTiles(world, palette());
         structures = new MapStructures(new StructureFinder(world));
     }

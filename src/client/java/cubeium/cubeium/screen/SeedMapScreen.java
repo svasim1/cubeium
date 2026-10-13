@@ -3,6 +3,7 @@ package cubeium.cubeium.screen;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.OptionalLong;
 
 import com.mojang.blaze3d.platform.InputConstants;
@@ -43,6 +44,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
+import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.storage.LevelResource;
 import org.jspecify.annotations.Nullable;
@@ -187,6 +190,11 @@ public final class SeedMapScreen extends Screen {
                 config.seeds.put(key, Long.toString(worldSeed.getAsLong()));
             }
         }
+        // In singleplayer the preset is read from the world; servers do not send it, so there it is a setting.
+        Optional<Boolean> detected = singleplayerLargeBiomes();
+        if (detected.isPresent()) {
+            setLargeBiomes(detected.get());
+        }
         if (newWorld || !config.keepMapPosition) {
             session.dimension = MapWidget.defaultDimension();
             session.view.setZoom(MapView.DEFAULT_ZOOM);
@@ -198,7 +206,19 @@ public final class SeedMapScreen extends Screen {
     private void applySeed(String text) {
         OptionalLong seed = WorldOptions.parseSeed(text);
         config.seeds.put(worldKey, text);
-        session.show(seed.isPresent() ? seed.getAsLong() : null, session.dimension);
+        session.show(seed.isPresent() ? seed.getAsLong() : null, session.dimension, largeBiomes());
+    }
+
+    private boolean largeBiomes() {
+        return config.largeBiomeWorlds.contains(worldKey);
+    }
+
+    private void setLargeBiomes(boolean enabled) {
+        if (enabled) {
+            config.largeBiomeWorlds.add(worldKey);
+        } else {
+            config.largeBiomeWorlds.remove(worldKey);
+        }
     }
 
     private void switchDimension(Dimension dimension) {
@@ -206,7 +226,7 @@ public final class SeedMapScreen extends Screen {
         if (!Double.isNaN(scale)) {
             session.view.center(session.view.centerX() * scale, session.view.centerZ() * scale);
         }
-        session.show(session.seed(), dimension);
+        session.show(session.seed(), dimension, largeBiomes());
         rebuildPending = true; // structure and biome lists depend on the dimension
     }
 
@@ -245,6 +265,19 @@ public final class SeedMapScreen extends Screen {
                         config.slimeChunks = v;
                         config.save();
                     }), 0, 2);
+        }
+
+        if (session.dimension == Dimension.OVERWORLD) {
+            boolean detected = minecraft.getSingleplayerServer() != null;
+            CycleButton<Boolean> large = CycleButton.onOffBuilder(largeBiomes())
+                    .withTooltip(v -> Tooltip.create(Component.translatable(detected ? "cubeium.map.large_biomes.detected" : "cubeium.map.large_biomes.tooltip")))
+                    .create(0, 0, 150, 20, Component.translatable("cubeium.map.large_biomes"), (b, v) -> {
+                        setLargeBiomes(v);
+                        config.save();
+                        session.show(session.seed(), session.dimension, v);
+                    });
+            large.active = !detected;
+            grid.addChild(large, 1, 2);
         }
 
         LinearLayout goTo = LinearLayout.horizontal().spacing(4);
@@ -567,6 +600,16 @@ public final class SeedMapScreen extends Screen {
         }
         ServerData data = minecraft.getCurrentServer();
         return data != null ? "mp:" + data.ip : "none";
+    }
+
+    /** Whether the singleplayer world uses the Large Biomes preset; empty on servers. */
+    private Optional<Boolean> singleplayerLargeBiomes() {
+        IntegratedServer server = minecraft.getSingleplayerServer();
+        if (server == null) {
+            return Optional.empty();
+        }
+        return Optional.of(server.overworld().getChunkSource().getGenerator() instanceof NoiseBasedChunkGenerator noise
+                && noise.generatorSettings().is(NoiseGeneratorSettings.LARGE_BIOMES));
     }
 
     private OptionalLong singleplayerSeed() {

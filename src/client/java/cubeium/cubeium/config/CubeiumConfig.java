@@ -52,6 +52,9 @@ public final class CubeiumConfig {
     /** Seed text per world ("sp:<save name>" or "mp:<server address>"), so each world keeps its own. */
     public Map<String, String> seeds = new LinkedHashMap<>();
 
+    /** Worlds (keyed like {@link #seeds}) that use the Large Biomes preset. */
+    public Set<String> largeBiomeWorlds = new LinkedHashSet<>();
+
     /** Waypoints per world, keyed like {@link #seeds}. */
     public Map<String, List<Waypoint>> waypoints = new LinkedHashMap<>();
 
@@ -122,6 +125,7 @@ public final class CubeiumConfig {
         }
         if (highlightedBiomes == null) highlightedBiomes = new LinkedHashSet<>();
         if (seeds == null) seeds = new LinkedHashMap<>();
+        if (largeBiomeWorlds == null) largeBiomeWorlds = new LinkedHashSet<>();
         if (waypoints == null) waypoints = new LinkedHashMap<>();
     }
 
