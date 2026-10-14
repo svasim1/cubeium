@@ -48,6 +48,9 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.biome.BiomeResolver;
+import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
+import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.WorldgenRandom;
 import net.minecraft.world.level.levelgen.structure.BuiltinStructures;
@@ -82,6 +85,7 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
             failures.addAll(singleplayer.getServer().computeOnServer(CubeiumClientGameTest::compareBiomes));
             failures.addAll(singleplayer.getServer().computeOnServer(CubeiumClientGameTest::compareStructures));
             failures.addAll(singleplayer.getServer().computeOnServer(CubeiumClientGameTest::compareSlimeChunks));
+            failures.addAll(singleplayer.getServer().computeOnServer(CubeiumClientGameTest::compareLargeBiomes));
             if (!failures.isEmpty()) {
                 throw new AssertionError(String.join("\n", failures));
             }
@@ -139,6 +143,46 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
         if (seen.size() < minBiomes) {
             failures.add(world.dimension() + ": only " + seen.size() + " distinct biomes - not a default world?");
         }
+    }
+
+    /**
+     * Large Biomes worlds use the same biome source with different noise settings, so Minecraft's
+     * answer comes from this world's biome source sampled with the large_biomes noise router.
+     */
+    private static List<String> compareLargeBiomes(MinecraftServer server) {
+        ServerLevel level = server.overworld();
+        long seed = level.getSeed();
+        NoiseGeneratorSettings settings = server.registryAccess().lookupOrThrow(Registries.NOISE_SETTINGS)
+                .getOrThrow(NoiseGeneratorSettings.LARGE_BIOMES).value();
+        RandomState noise = RandomState.create(server.registryAccess().lookupOrThrow(Registries.NOISE), seed, settings);
+        BiomeResolver source = level.getChunkSource().getGenerator().getBiomeSource().createUncachedResolver(noise);
+        WorldGenerator large = new WorldGenerator(MC, seed, Dimension.OVERWORLD, true);
+        WorldGenerator normal = new WorldGenerator(MC, seed, Dimension.OVERWORLD);
+        Random random = new Random(2);
+        List<String> mismatches = new ArrayList<>();
+        int differFromNormal = 0;
+        for (int i = 0; i < BIOME_SAMPLES; i++) {
+            int x = random.nextInt(2 * BIOME_RANGE) - BIOME_RANGE, z = random.nextInt(2 * BIOME_RANGE) - BIOME_RANGE;
+            String expected = source.getNoiseBiome(x >> 2, WorldGenerator.MAP_BIOME_Y >> 2, z >> 2)
+                    .unwrapKey().orElseThrow().identifier().getPath();
+            String actual = Biomes.name(MC, large.biomeAt(x, z));
+            if (!expected.equals(actual)) {
+                mismatches.add("(" + x + ", " + z + ") minecraft=" + expected + " cubeium=" + actual);
+            }
+            if (large.biomeAt(x, z) != normal.biomeAt(x, z)) {
+                differFromNormal++;
+            }
+        }
+        Cubeium.LOGGER.info("[GameTest] Large Biomes: {} samples, {} mismatches, {} differ from the default preset",
+                BIOME_SAMPLES, mismatches.size(), differFromNormal);
+        List<String> failures = new ArrayList<>();
+        if (!mismatches.isEmpty()) {
+            failures.add("Large Biomes: " + mismatches.size() + " mismatches, first " + mismatches.subList(0, Math.min(5, mismatches.size())));
+        }
+        if (differFromNormal < BIOME_SAMPLES / 4) {
+            failures.add("Large Biomes: only " + differFromNormal + " samples differ from the default preset - flag not applied?");
+        }
+        return failures;
     }
 
     /** The per-thread native generator, via a throwaway biome call's generator. */
