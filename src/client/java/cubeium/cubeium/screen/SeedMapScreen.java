@@ -571,15 +571,15 @@ public final class SeedMapScreen extends Screen {
         Minecraft minecraft = Minecraft.getInstance();
         ClientPacketListener connection = minecraft.getConnection();
         return CubeiumConfig.get().teleportInMenu && minecraft.player != null && connection != null
-                && connection.getCommands().getRoot().getChild("spreadplayers") != null
-                && connection.getCommands().getRoot().getChild("execute") != null;
+                && connection.getCommands().getRoot().getChild("tp") != null
+                && connection.getCommands().getRoot().getChild("spreadplayers") != null;
     }
 
     /**
-     * Teleports onto the ground at a column. /spreadplayers picks a safe surface block instead of
-     * keeping the current height like /tp, so the End void or the Nether roof cannot kill the
-     * player; where there is no safe ground the command just fails. In the Nether it searches below
-     * the bedrock roof.
+     * Teleports to a column. Players who can fly keep their height (a plain /tp). Everyone else lands
+     * on safe ground through /spreadplayers, which loads the area and picks a solid block within 8 blocks (below the
+     * bedrock roof in the Nether); over an ocean, a lava sea or the void it fails instead of hurting
+     * the player.
      */
     static void teleport(Dimension dimension, int x, int z) {
         Minecraft minecraft = Minecraft.getInstance();
@@ -587,9 +587,16 @@ public final class SeedMapScreen extends Screen {
         if (connection == null || minecraft.player == null) {
             return;
         }
+        connection.sendCommand(teleportCommand(dimension, x, z, minecraft.player.getAbilities().mayfly));
+    }
+
+    /** The command (without slash) that {@link #teleport} sends. */
+    public static String teleportCommand(Dimension dimension, int x, int z, boolean canFly) {
+        if (canFly) {
+            return String.format(Locale.ROOT, "execute in minecraft:%s run tp @s %d ~ %d", dimension.key(), x, z);
+        }
         String under = dimension == Dimension.NETHER ? "under 120 " : "";
-        connection.sendCommand(String.format(Locale.ROOT, "execute in minecraft:%s run spreadplayers %d %d 0 1 %sfalse @s",
-                dimension.key(), x, z, under));
+        return String.format(Locale.ROOT, "execute in minecraft:%s run spreadplayers %d %d 0 8 %sfalse @s", dimension.key(), x, z, under);
     }
 
     /** Identifies the current world so each keeps its own seed. */

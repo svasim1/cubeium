@@ -39,7 +39,9 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.StructureTags;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
@@ -91,9 +93,51 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
             }
 
             screenshots(context);
+            // Last, as it moves the player to another dimension.
+            List<String> teleport = singleplayer.getServer().computeOnServer(CubeiumClientGameTest::checkTeleport);
+            if (!teleport.isEmpty()) {
+                throw new AssertionError(String.join("\n", teleport));
+            }
         }
     }
 
+    /** "Teleport here" without flight must land on solid ground, and below the roof in the Nether. */
+    private static List<String> checkTeleport(MinecraftServer server) {
+        List<String> failures = new ArrayList<>();
+        ServerPlayer player = server.getPlayerList().getPlayers().getFirst();
+        for (Dimension dimension : new Dimension[] {Dimension.OVERWORLD, Dimension.NETHER}) {
+            int[] target = landNear(new WorldGenerator(MC, server.overworld().getSeed(), dimension), 600, -400);
+            int x = target[0], z = target[1];
+            CommandSourceStack source = server.createCommandSourceStack().withEntity(player);
+            server.getCommands().performPrefixedCommand(source, SeedMapScreen.teleportCommand(dimension, x, z, false));
+            ServerLevel level = (ServerLevel) player.level();
+            BlockPos feet = player.blockPosition();
+            boolean ground = level.getBlockState(feet.below()).isSolid() && !level.getBlockState(feet).isSolid();
+            boolean underRoof = dimension != Dimension.NETHER || feet.getY() <= 121;
+            boolean placed = Math.abs(feet.getX() - x) <= 9 && Math.abs(feet.getZ() - z) <= 9
+                    && level.dimension().identifier().getPath().equals(dimension.key());
+            Cubeium.LOGGER.info("[GameTest] Teleport {}: landed at {} in {}, on ground {}, under roof {}",
+                    dimension, feet.toShortString(), level.dimension().identifier(), ground, underRoof);
+            if (!placed || !ground || !underRoof) {
+                failures.add("Teleport to " + dimension + " landed at " + feet.toShortString() + " in " + level.dimension().identifier());
+            }
+        }
+        return failures;
+    }
+
+
+    /** A column near (x, z) whose surface biome is not water or (Nether) a lava-filled basalt delta. */
+    private static int[] landNear(WorldGenerator world, int x, int z) {
+        for (int r = 0; r < 4000; r += 32) {
+            for (int dx = -r; dx <= r; dx += 32) {
+                String name = Biomes.name(MC, world.biomeAt(x + dx, z + r));
+                if (!name.contains("ocean") && !name.contains("river") && !name.equals("basalt_deltas")) {
+                    return new int[] {x + dx, z + r};
+                }
+            }
+        }
+        return new int[] {x, z};
+    }
 
     private static List<String> compareBiomes(MinecraftServer server) {
         long seed = server.overworld().getSeed();
