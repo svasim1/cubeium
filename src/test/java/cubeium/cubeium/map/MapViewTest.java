@@ -38,4 +38,13 @@ class MapViewTest {
         assertEquals(-80, view.centerX());
         assertEquals(40, view.centerZ());
     }
+
+    @Test
+    void viewStaysInsideTheWorldBorder() {
+        MapView view = new MapView();
+        view.setZoom(MapView.MAX_ZOOM);
+        view.panPixels(-1e9, 1e9);
+        assertEquals(MapView.WORLD_LIMIT, view.centerX());
+        assertEquals(-MapView.WORLD_LIMIT, view.centerZ());
+    }
 }

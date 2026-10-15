@@ -19,6 +19,8 @@ import cubeium.cubeium.world.StructureKind;
 public final class MapStructures {
     /** Minimum on-screen distance between a kind's placement regions for its markers to be shown. */
     private static final double MIN_REGION_PIXELS = 6;
+    /** After a failed search, wait this long before trying the area again. */
+    private static final long RETRY_DELAY_MS = 2000;
 
     private static final ExecutorService SEARCH = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "Cubeium structure search");
@@ -31,7 +33,8 @@ public final class MapStructures {
     private final AtomicLong generation = new AtomicLong();
     private volatile List<StructureFinder.Found> found = List.of();
     private volatile Query covered;
-    private Query requested;
+    private volatile Query requested;
+    private volatile long retryAt;
 
     public MapStructures(StructureFinder finder) {
         this.finder = finder;
@@ -40,6 +43,11 @@ public final class MapStructures {
     /** Structures found so far; may lag behind the view by one search. */
     public List<StructureFinder.Found> found() {
         return found;
+    }
+
+    /** Whether the kind exists in this world's Minecraft version. */
+    public boolean supports(StructureKind kind) {
+        return finder.supports(kind);
     }
 
     /** Whether a kind is searched at this zoom (markers of widely spaced kinds would otherwise pile up). */
@@ -66,6 +74,9 @@ public final class MapStructures {
     /** Called every frame with the view rectangle in blocks; starts a search when needed. */
     public void update(Set<StructureKind> enabled, double left, double top, double right, double bottom, double blocksPerPixel) {
         List<StructureKind> kinds = enabled.stream().filter(k -> visibleAt(k, blocksPerPixel)).sorted().toList();
+        if (System.currentTimeMillis() < retryAt) {
+            return;
+        }
         if (covered != null && covered.contains(kinds, left, top, right, bottom)
                 || requested != null && requested.contains(kinds, left, top, right, bottom)) {
             return;
@@ -89,6 +100,10 @@ public final class MapStructures {
             }
         } catch (RuntimeException e) {
             Cubeium.LOGGER.warn("Structure search failed", e);
+            if (generation.get() == id) {
+                retryAt = System.currentTimeMillis() + RETRY_DELAY_MS;
+                requested = null; // search the area again after the delay
+            }
             return;
         }
         if (generation.get() == id) {

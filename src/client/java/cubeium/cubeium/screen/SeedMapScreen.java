@@ -3,6 +3,7 @@ package cubeium.cubeium.screen;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.OptionalLong;
 
 import com.mojang.blaze3d.platform.InputConstants;
@@ -10,6 +11,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import cubeium.cubeium.CubeiumClient;
 import cubeium.cubeium.config.CubeiumConfig;
 import cubeium.cubeium.config.Waypoint;
+import cubeium.cubeium.map.MapStructures;
 import cubeium.cubeium.map.MapView;
 import cubeium.cubeium.world.Biomes;
 import cubeium.cubeium.world.Dimension;
@@ -42,6 +44,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
+import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.storage.LevelResource;
 import org.jspecify.annotations.Nullable;
@@ -186,6 +190,11 @@ public final class SeedMapScreen extends Screen {
                 config.seeds.put(key, Long.toString(worldSeed.getAsLong()));
             }
         }
+        // In singleplayer the preset is read from the world; servers do not send it, so there it is a setting.
+        Optional<Boolean> detected = singleplayerLargeBiomes();
+        if (detected.isPresent()) {
+            setLargeBiomes(detected.get());
+        }
         if (newWorld || !config.keepMapPosition) {
             session.dimension = MapWidget.defaultDimension();
             session.view.setZoom(MapView.DEFAULT_ZOOM);
@@ -197,7 +206,19 @@ public final class SeedMapScreen extends Screen {
     private void applySeed(String text) {
         OptionalLong seed = WorldOptions.parseSeed(text);
         config.seeds.put(worldKey, text);
-        session.show(seed.isPresent() ? seed.getAsLong() : null, session.dimension);
+        session.show(seed.isPresent() ? seed.getAsLong() : null, session.dimension, largeBiomes());
+    }
+
+    private boolean largeBiomes() {
+        return config.largeBiomeWorlds.contains(worldKey);
+    }
+
+    private void setLargeBiomes(boolean enabled) {
+        if (enabled) {
+            config.largeBiomeWorlds.add(worldKey);
+        } else {
+            config.largeBiomeWorlds.remove(worldKey);
+        }
     }
 
     private void switchDimension(Dimension dimension) {
@@ -205,7 +226,7 @@ public final class SeedMapScreen extends Screen {
         if (!Double.isNaN(scale)) {
             session.view.center(session.view.centerX() * scale, session.view.centerZ() * scale);
         }
-        session.show(session.seed(), dimension);
+        session.show(session.seed(), dimension, largeBiomes());
         rebuildPending = true; // structure and biome lists depend on the dimension
     }
 
@@ -244,6 +265,19 @@ public final class SeedMapScreen extends Screen {
                         config.slimeChunks = v;
                         config.save();
                     }), 0, 2);
+        }
+
+        if (session.dimension == Dimension.OVERWORLD) {
+            boolean detected = minecraft.getSingleplayerServer() != null;
+            CycleButton<Boolean> large = CycleButton.onOffBuilder(largeBiomes())
+                    .withTooltip(v -> Tooltip.create(Component.translatable(detected ? "cubeium.map.large_biomes.detected" : "cubeium.map.large_biomes.tooltip")))
+                    .create(0, 0, 150, 20, Component.translatable("cubeium.map.large_biomes"), (b, v) -> {
+                        setLargeBiomes(v);
+                        config.save();
+                        session.show(session.seed(), session.dimension, v);
+                    });
+            large.active = !detected;
+            grid.addChild(large, 1, 2);
         }
 
         LinearLayout goTo = LinearLayout.horizontal().spacing(4);
@@ -305,7 +339,11 @@ public final class SeedMapScreen extends Screen {
         int columnWidth = (panelWidth - 20) / columns;
         GridLayout list = new GridLayout().rowSpacing(3);
         GridLayout.RowHelper rows = list.createRowHelper(columns);
+        MapStructures structures = session.structures();
         for (StructureKind kind : StructureKind.in(session.dimension)) {
+            if (structures != null && !structures.supports(kind)) {
+                continue;
+            }
             rows.addChild(Checkbox.builder(Component.translatable("cubeium.structure." + kind.key()), font)
                     .maxWidth(columnWidth - 4)
                     .selected(config.structures.contains(kind.key()))
@@ -528,25 +566,37 @@ public final class SeedMapScreen extends Screen {
         return Component.translatable("cubeium.dimension." + dimension.key());
     }
 
-    /** Teleporting is offered only when enabled and the server lets this player run /tp. */
+    /** Teleporting is offered only when enabled and the server lets this player run the commands. */
     static boolean canTeleport() {
         Minecraft minecraft = Minecraft.getInstance();
         ClientPacketListener connection = minecraft.getConnection();
         return CubeiumConfig.get().teleportInMenu && minecraft.player != null && connection != null
-                && connection.getCommands().getRoot().getChild("tp") != null;
+                && connection.getCommands().getRoot().getChild("tp") != null
+                && connection.getCommands().getRoot().getChild("spreadplayers") != null;
     }
 
+    /**
+     * Teleports to a column. Players who can fly keep their height (a plain /tp). Everyone else lands
+     * on safe ground through /spreadplayers, which loads the area and picks a solid block within 8 blocks (below the
+     * bedrock roof in the Nether); over an ocean, a lava sea or the void it fails instead of hurting
+     * the player.
+     */
     static void teleport(Dimension dimension, int x, int z) {
         Minecraft minecraft = Minecraft.getInstance();
         ClientPacketListener connection = minecraft.getConnection();
         if (connection == null || minecraft.player == null) {
             return;
         }
-        if (dimensionOf(minecraft.player) == dimension) {
-            connection.sendCommand(String.format(Locale.ROOT, "tp @s %d ~ %d", x, z));
-        } else {
-            connection.sendCommand(String.format(Locale.ROOT, "execute in minecraft:%s run tp @s %d ~ %d", dimension.key(), x, z));
+        connection.sendCommand(teleportCommand(dimension, x, z, minecraft.player.getAbilities().mayfly));
+    }
+
+    /** The command (without slash) that {@link #teleport} sends. */
+    public static String teleportCommand(Dimension dimension, int x, int z, boolean canFly) {
+        if (canFly) {
+            return String.format(Locale.ROOT, "execute in minecraft:%s run tp @s %d ~ %d", dimension.key(), x, z);
         }
+        String under = dimension == Dimension.NETHER ? "under 120 " : "";
+        return String.format(Locale.ROOT, "execute in minecraft:%s run spreadplayers %d %d 0 8 %sfalse @s", dimension.key(), x, z, under);
     }
 
     /** Identifies the current world so each keeps its own seed. */
@@ -557,6 +607,16 @@ public final class SeedMapScreen extends Screen {
         }
         ServerData data = minecraft.getCurrentServer();
         return data != null ? "mp:" + data.ip : "none";
+    }
+
+    /** Whether the singleplayer world uses the Large Biomes preset; empty on servers. */
+    private Optional<Boolean> singleplayerLargeBiomes() {
+        IntegratedServer server = minecraft.getSingleplayerServer();
+        if (server == null) {
+            return Optional.empty();
+        }
+        return Optional.of(server.overworld().getChunkSource().getGenerator() instanceof NoiseBasedChunkGenerator noise
+                && noise.generatorSettings().is(NoiseGeneratorSettings.LARGE_BIOMES));
     }
 
     private OptionalLong singleplayerSeed() {
