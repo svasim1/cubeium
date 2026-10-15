@@ -112,12 +112,14 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
             server.getCommands().performPrefixedCommand(source, SeedMapScreen.teleportCommand(dimension, x, z, false));
             ServerLevel level = (ServerLevel) player.level();
             BlockPos feet = player.blockPosition();
-            boolean ground = level.getBlockState(feet.below()).isSolid() && !level.getBlockState(feet).isSolid();
+            // Something to stand on (snow layers and carpets count), no liquid, and room for the feet.
+            var below = level.getBlockState(feet.below());
+            boolean ground = !below.isAir() && below.getFluidState().isEmpty() && !level.getBlockState(feet).isSolid();
             boolean underRoof = dimension != Dimension.NETHER || feet.getY() <= 121;
             boolean placed = Math.abs(feet.getX() - x) <= 9 && Math.abs(feet.getZ() - z) <= 9
                     && level.dimension().identifier().getPath().equals(dimension.key());
-            Cubeium.LOGGER.info("[GameTest] Teleport {}: landed at {} in {}, on ground {}, under roof {}",
-                    dimension, feet.toShortString(), level.dimension().identifier(), ground, underRoof);
+            Cubeium.LOGGER.info("[GameTest] Teleport {}: landed at {} in {} (standing on {}, feet in {}), on ground {}, under roof {}",
+                    dimension, feet.toShortString(), level.dimension().identifier(), level.getBlockState(feet.below()), level.getBlockState(feet), ground, underRoof);
             if (!placed || !ground || !underRoof) {
                 failures.add("Teleport to " + dimension + " landed at " + feet.toShortString() + " in " + level.dimension().identifier());
             }
