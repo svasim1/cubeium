@@ -39,7 +39,9 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.StructureTags;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
@@ -48,6 +50,9 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.biome.BiomeSource;
+import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
+import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.WorldgenRandom;
 import net.minecraft.world.level.levelgen.structure.BuiltinStructures;
@@ -82,14 +87,59 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
             failures.addAll(singleplayer.getServer().computeOnServer(CubeiumClientGameTest::compareBiomes));
             failures.addAll(singleplayer.getServer().computeOnServer(CubeiumClientGameTest::compareStructures));
             failures.addAll(singleplayer.getServer().computeOnServer(CubeiumClientGameTest::compareSlimeChunks));
+            failures.addAll(singleplayer.getServer().computeOnServer(CubeiumClientGameTest::compareLargeBiomes));
             if (!failures.isEmpty()) {
                 throw new AssertionError(String.join("\n", failures));
             }
 
             screenshots(context);
+            // Last, as it moves the player to another dimension.
+            List<String> teleport = singleplayer.getServer().computeOnServer(CubeiumClientGameTest::checkTeleport);
+            if (!teleport.isEmpty()) {
+                throw new AssertionError(String.join("\n", teleport));
+            }
         }
     }
 
+    /** "Teleport here" without flight must land on solid ground, and below the roof in the Nether. */
+    private static List<String> checkTeleport(MinecraftServer server) {
+        List<String> failures = new ArrayList<>();
+        ServerPlayer player = server.getPlayerList().getPlayers().getFirst();
+        for (Dimension dimension : new Dimension[] {Dimension.OVERWORLD, Dimension.NETHER}) {
+            int[] target = landNear(new WorldGenerator(MC, server.overworld().getSeed(), dimension), 600, -400);
+            int x = target[0], z = target[1];
+            CommandSourceStack source = server.createCommandSourceStack().withEntity(player);
+            server.getCommands().performPrefixedCommand(source, SeedMapScreen.teleportCommand(dimension, x, z, false));
+            ServerLevel level = (ServerLevel) player.level();
+            BlockPos feet = player.blockPosition();
+            // Something to stand on (snow layers and carpets count), no liquid, and room for the feet.
+            var below = level.getBlockState(feet.below());
+            boolean ground = !below.isAir() && below.getFluidState().isEmpty() && !level.getBlockState(feet).isSolid();
+            boolean underRoof = dimension != Dimension.NETHER || feet.getY() <= 121;
+            boolean placed = Math.abs(feet.getX() - x) <= 9 && Math.abs(feet.getZ() - z) <= 9
+                    && level.dimension().identifier().getPath().equals(dimension.key());
+            Cubeium.LOGGER.info("[GameTest] Teleport {}: landed at {} in {} (standing on {}, feet in {}), on ground {}, under roof {}",
+                    dimension, feet.toShortString(), level.dimension().identifier(), level.getBlockState(feet.below()), level.getBlockState(feet), ground, underRoof);
+            if (!placed || !ground || !underRoof) {
+                failures.add("Teleport to " + dimension + " landed at " + feet.toShortString() + " in " + level.dimension().identifier());
+            }
+        }
+        return failures;
+    }
+
+
+    /** A column near (x, z) whose surface biome is not water or (Nether) a lava-filled basalt delta. */
+    private static int[] landNear(WorldGenerator world, int x, int z) {
+        for (int r = 0; r < 4000; r += 32) {
+            for (int dx = -r; dx <= r; dx += 32) {
+                String name = Biomes.name(MC, world.biomeAt(x + dx, z + r));
+                if (!name.contains("ocean") && !name.contains("river") && !name.equals("basalt_deltas")) {
+                    return new int[] {x + dx, z + r};
+                }
+            }
+        }
+        return new int[] {x, z};
+    }
 
     private static List<String> compareBiomes(MinecraftServer server) {
         long seed = server.overworld().getSeed();
@@ -139,6 +189,44 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
         if (seen.size() < minBiomes) {
             failures.add(world.dimension() + ": only " + seen.size() + " distinct biomes - not a default world?");
         }
+    }
+
+    /**
+     * Large Biomes worlds use the same biome source with different noise settings, so Minecraft's
+     * answer comes from this world's biome source sampled with the large_biomes noise router.
+     */
+    private static List<String> compareLargeBiomes(MinecraftServer server) {
+        ServerLevel level = server.overworld();
+        long seed = level.getSeed();
+        RandomState noise = RandomState.create(server.registryAccess(), NoiseGeneratorSettings.LARGE_BIOMES, seed);
+        BiomeSource source = level.getChunkSource().getGenerator().getBiomeSource();
+        WorldGenerator large = new WorldGenerator(MC, seed, Dimension.OVERWORLD, true);
+        WorldGenerator normal = new WorldGenerator(MC, seed, Dimension.OVERWORLD);
+        Random random = new Random(2);
+        List<String> mismatches = new ArrayList<>();
+        int differFromNormal = 0;
+        for (int i = 0; i < BIOME_SAMPLES; i++) {
+            int x = random.nextInt(2 * BIOME_RANGE) - BIOME_RANGE, z = random.nextInt(2 * BIOME_RANGE) - BIOME_RANGE;
+            String expected = source.getNoiseBiome(x >> 2, WorldGenerator.MAP_BIOME_Y >> 2, z >> 2, noise.sampler())
+                    .unwrapKey().orElseThrow().identifier().getPath();
+            String actual = Biomes.name(MC, large.biomeAt(x, z));
+            if (!expected.equals(actual)) {
+                mismatches.add("(" + x + ", " + z + ") minecraft=" + expected + " cubeium=" + actual);
+            }
+            if (large.biomeAt(x, z) != normal.biomeAt(x, z)) {
+                differFromNormal++;
+            }
+        }
+        Cubeium.LOGGER.info("[GameTest] Large Biomes: {} samples, {} mismatches, {} differ from the default preset",
+                BIOME_SAMPLES, mismatches.size(), differFromNormal);
+        List<String> failures = new ArrayList<>();
+        if (!mismatches.isEmpty()) {
+            failures.add("Large Biomes: " + mismatches.size() + " mismatches, first " + mismatches.subList(0, Math.min(5, mismatches.size())));
+        }
+        if (differFromNormal < BIOME_SAMPLES / 4) {
+            failures.add("Large Biomes: only " + differFromNormal + " samples differ from the default preset - flag not applied?");
+        }
+        return failures;
     }
 
     /** The per-thread native generator, via a throwaway biome call's generator. */

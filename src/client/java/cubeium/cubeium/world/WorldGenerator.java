@@ -14,7 +14,7 @@ import dev.xpple.cubiomes.StrongholdIter;
 import dev.xpple.cubiomes.SurfaceNoise;
 
 /**
- * cubiomes world generation for one seed, dimension and Minecraft version.
+ * cubiomes world generation for one seed, dimension, Minecraft version and world preset.
  *
  * <p>Instances are immutable and safe to share between threads: a native cubiomes generator is
  * not thread-safe (some calls temporarily modify it), so every thread lazily gets its own. A seed
@@ -34,13 +34,20 @@ public final class WorldGenerator {
     private final int mcVersion;
     private final long seed;
     private final Dimension dimension;
+    private final boolean largeBiomes;
     private final ThreadLocal<MemorySegment> generator = ThreadLocal.withInitial(this::createGenerator);
     private final ThreadLocal<MemorySegment> endSurface = ThreadLocal.withInitial(this::createEndSurface);
 
     public WorldGenerator(int mcVersion, long seed, Dimension dimension) {
+        this(mcVersion, seed, dimension, false);
+    }
+
+    /** {@code largeBiomes}: the world uses the Large Biomes preset (only changes the Overworld). */
+    public WorldGenerator(int mcVersion, long seed, Dimension dimension, boolean largeBiomes) {
         this.mcVersion = mcVersion;
         this.seed = seed;
         this.dimension = dimension;
+        this.largeBiomes = largeBiomes;
     }
 
     public int mcVersion() {
@@ -53,6 +60,10 @@ public final class WorldGenerator {
 
     public Dimension dimension() {
         return dimension;
+    }
+
+    public boolean largeBiomes() {
+        return largeBiomes;
     }
 
     /**
@@ -80,7 +91,7 @@ public final class WorldGenerator {
             if (err != 0) {
                 throw new IllegalStateException("cubiomes genBiomes failed (" + err + ") at scale " + scale);
             }
-            return Arrays.copyOf(cache.toArray(ValueLayout.JAVA_INT), width * height);
+            return cache.asSlice(0, (long) width * height * Integer.BYTES).toArray(ValueLayout.JAVA_INT);
         }
     }
 
@@ -163,7 +174,7 @@ public final class WorldGenerator {
     private MemorySegment createGenerator() {
         // Arena.ofAuto: freed by the GC once this thread and this WorldGenerator are gone.
         MemorySegment g = Generator.allocate(Arena.ofAuto());
-        Cubiomes.setupGenerator(g, mcVersion, 0);
+        Cubiomes.setupGenerator(g, mcVersion, largeBiomes ? Cubiomes.LARGE_BIOMES() : 0);
         Cubiomes.applySeed(g, dimension.cubiomesId(), seed);
         return g;
     }

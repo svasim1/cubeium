@@ -1,6 +1,5 @@
 package cubeium.cubeium.screen;
 
-import java.util.Set;
 import java.util.function.IntUnaryOperator;
 
 import cubeium.cubeium.config.CubeiumConfig;
@@ -40,19 +39,20 @@ final class MapSession {
         return instance;
     }
 
-    /** Switches to a seed/dimension; keeps everything cached when nothing changed. */
-    void show(@Nullable Long seed, Dimension dimension) {
+    /** Switches to a seed/dimension/preset; keeps everything cached when nothing changed. */
+    void show(@Nullable Long seed, Dimension dimension, boolean largeBiomes) {
         this.dimension = dimension;
         if (seed == null) {
             clear();
             return;
         }
-        if (tiles != null && seed.equals(this.seed) && tiles.world().dimension() == dimension) {
+        if (tiles != null && seed.equals(this.seed) && tiles.world().dimension() == dimension
+                && tiles.world().largeBiomes() == largeBiomes) {
             return;
         }
         clear();
         this.seed = seed;
-        WorldGenerator world = new WorldGenerator(MC_VERSION, seed, dimension);
+        WorldGenerator world = new WorldGenerator(MC_VERSION, seed, dimension, largeBiomes);
         tiles = new MapTiles(world, palette());
         structures = new MapStructures(new StructureFinder(world));
     }
@@ -81,8 +81,12 @@ final class MapSession {
         if (!config.highlightBiomes) {
             return Biomes::color;
         }
-        Set<Integer> selected = Set.copyOf(config.highlightedBiomes);
-        return id -> selected.contains(id) ? Biomes.color(id) : dimmed(Biomes.color(id));
+        // A lookup table: tiles are recolored per texel, so this stays cheap.
+        int[] colors = new int[Biomes.ID_LIMIT];
+        for (int id = 0; id < colors.length; id++) {
+            colors[id] = config.highlightedBiomes.contains(id) ? Biomes.color(id) : dimmed(Biomes.color(id));
+        }
+        return id -> id >= 0 && id < colors.length ? colors[id] : Biomes.color(id);
     }
 
     /** Non-highlighted biomes: desaturated and dark, but still recognisable. */

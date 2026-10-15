@@ -43,12 +43,17 @@ public final class CubeiumConfig {
 
     /** Enabled structures, by {@link StructureKind#key()}. */
     public Set<String> structures = new LinkedHashSet<>(defaultStructures());
+    /** Structures this file has seen; ones added by a later update get their default setting. */
+    public Set<String> knownStructures = allStructures();
 
     public boolean highlightBiomes = false;
     public Set<Integer> highlightedBiomes = new LinkedHashSet<>();
 
     /** Seed text per world ("sp:<save name>" or "mp:<server address>"), so each world keeps its own. */
     public Map<String, String> seeds = new LinkedHashMap<>();
+
+    /** Worlds (keyed like {@link #seeds}) that use the Large Biomes preset. */
+    public Set<String> largeBiomeWorlds = new LinkedHashSet<>();
 
     /** Waypoints per world, keyed like {@link #seeds}. */
     public Map<String, List<Waypoint>> waypoints = new LinkedHashMap<>();
@@ -111,9 +116,25 @@ public final class CubeiumConfig {
     /** Gson leaves fields missing from an older file null. */
     private void repairNulls() {
         if (structures == null) structures = new LinkedHashSet<>(defaultStructures());
+        if (knownStructures == null) knownStructures = allStructures();
+        Set<String> defaults = defaultStructures();
+        for (String key : allStructures()) {
+            if (knownStructures.add(key) && defaults.contains(key)) {
+                structures.add(key);
+            }
+        }
         if (highlightedBiomes == null) highlightedBiomes = new LinkedHashSet<>();
         if (seeds == null) seeds = new LinkedHashMap<>();
+        if (largeBiomeWorlds == null) largeBiomeWorlds = new LinkedHashSet<>();
         if (waypoints == null) waypoints = new LinkedHashMap<>();
+    }
+
+    private static Set<String> allStructures() {
+        Set<String> keys = new LinkedHashSet<>();
+        for (StructureKind kind : StructureKind.values()) {
+            keys.add(kind.key());
+        }
+        return keys;
     }
 
     private static Set<String> defaultStructures() {
