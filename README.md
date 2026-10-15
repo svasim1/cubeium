@@ -26,7 +26,7 @@ An automated in-game test compares the map with Minecraft's own world generation
 strongholds and slime chunks match exactly. Structures that depend on terrain height, like
 villages, match for 97-99% of the checked spots.
 
-Worlds using the Large Biomes preset are not supported.
+Large Biomes worlds are supported: detected automatically in singleplayer, and a toggle in the Map tab on servers.
 
 ## Background
 
