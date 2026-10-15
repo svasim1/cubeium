@@ -50,7 +50,7 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
-import net.minecraft.world.level.biome.BiomeResolver;
+import net.minecraft.world.level.biome.BiomeSource;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.WorldOptions;
@@ -112,12 +112,14 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
             server.getCommands().performPrefixedCommand(source, SeedMapScreen.teleportCommand(dimension, x, z, false));
             ServerLevel level = (ServerLevel) player.level();
             BlockPos feet = player.blockPosition();
-            boolean ground = level.getBlockState(feet.below()).isSolid() && !level.getBlockState(feet).isSolid();
+            // Something to stand on (snow layers and carpets count), no liquid, and room for the feet.
+            var below = level.getBlockState(feet.below());
+            boolean ground = !below.isAir() && below.getFluidState().isEmpty() && !level.getBlockState(feet).isSolid();
             boolean underRoof = dimension != Dimension.NETHER || feet.getY() <= 121;
             boolean placed = Math.abs(feet.getX() - x) <= 9 && Math.abs(feet.getZ() - z) <= 9
                     && level.dimension().identifier().getPath().equals(dimension.key());
-            Cubeium.LOGGER.info("[GameTest] Teleport {}: landed at {} in {}, on ground {}, under roof {}",
-                    dimension, feet.toShortString(), level.dimension().identifier(), ground, underRoof);
+            Cubeium.LOGGER.info("[GameTest] Teleport {}: landed at {} in {} (standing on {}, feet in {}), on ground {}, under roof {}",
+                    dimension, feet.toShortString(), level.dimension().identifier(), level.getBlockState(feet.below()), level.getBlockState(feet), ground, underRoof);
             if (!placed || !ground || !underRoof) {
                 failures.add("Teleport to " + dimension + " landed at " + feet.toShortString() + " in " + level.dimension().identifier());
             }
@@ -196,10 +198,8 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
     private static List<String> compareLargeBiomes(MinecraftServer server) {
         ServerLevel level = server.overworld();
         long seed = level.getSeed();
-        NoiseGeneratorSettings settings = server.registryAccess().lookupOrThrow(Registries.NOISE_SETTINGS)
-                .getOrThrow(NoiseGeneratorSettings.LARGE_BIOMES).value();
-        RandomState noise = RandomState.create(server.registryAccess().lookupOrThrow(Registries.NOISE), seed, settings);
-        BiomeResolver source = level.getChunkSource().getGenerator().getBiomeSource().createUncachedResolver(noise);
+        RandomState noise = RandomState.create(server.registryAccess(), NoiseGeneratorSettings.LARGE_BIOMES, seed);
+        BiomeSource source = level.getChunkSource().getGenerator().getBiomeSource();
         WorldGenerator large = new WorldGenerator(MC, seed, Dimension.OVERWORLD, true);
         WorldGenerator normal = new WorldGenerator(MC, seed, Dimension.OVERWORLD);
         Random random = new Random(2);
@@ -207,7 +207,7 @@ public class CubeiumClientGameTest implements FabricClientGameTest {
         int differFromNormal = 0;
         for (int i = 0; i < BIOME_SAMPLES; i++) {
             int x = random.nextInt(2 * BIOME_RANGE) - BIOME_RANGE, z = random.nextInt(2 * BIOME_RANGE) - BIOME_RANGE;
-            String expected = source.getNoiseBiome(x >> 2, WorldGenerator.MAP_BIOME_Y >> 2, z >> 2)
+            String expected = source.getNoiseBiome(x >> 2, WorldGenerator.MAP_BIOME_Y >> 2, z >> 2, noise.sampler())
                     .unwrapKey().orElseThrow().identifier().getPath();
             String actual = Biomes.name(MC, large.biomeAt(x, z));
             if (!expected.equals(actual)) {
